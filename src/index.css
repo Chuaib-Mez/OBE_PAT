@@ -1,0 +1,398 @@
+/* ============================================================
+   VARIABLES CSS GLOBALES
+   Définies sur :root pour être accessibles partout dans le CSS.
+   Utilisation : var(--nom-de-la-variable)
+   ============================================================ */
+:root{
+  /* Couleurs de fond */
+  --bg:#F5F6F8;         /* Fond général de la page (gris très clair) */
+  --surface:#FFFFFF;    /* Fond des cartes et éléments de premier plan (blanc) */
+  --surface-2:#FAFBFC;  /* Fond secondaire légèrement grisé (hover, inputs) */
+
+  /* Couleurs du texte */
+  --ink:#19212E;        /* Texte principal (quasi-noir) */
+  --ink-2:#5A6473;      /* Texte secondaire (gris moyen) */
+  --ink-3:#8A93A2;      /* Texte tertiaire / labels discrets (gris clair) */
+
+  /* Couleurs des bordures */
+  --line:#E3E7ED;       /* Bordure standard */
+  --line-2:#CDD3DC;     /* Bordure légèrement plus foncée */
+
+  /* Couleur principale : vert-sarcelle (teal) */
+  --teal:#0E7C66;       /* Couleur primaire : boutons, accents */
+  --teal-2:#0A6253;     /* Variante foncée du teal (hover) */
+  --teal-soft:#E3F1ED;  /* Variante très claire du teal (fonds de badges, highlights) */
+
+  /* Couleur d'alerte : ambre (orange-jaune) */
+  --amber:#B9791A;
+  --amber-soft:#FBEFD9;
+
+  /* Couleur d'erreur / échec : rouge */
+  --red:#C0463B;
+  --red-soft:#FAE7E5;
+
+  /* Rayons de bordure (coins arrondis) */
+  --radius:10px;
+  --radius-lg:14px;
+
+  /* Polices de caractères */
+  --mono:ui-monospace,"SF Mono","Cascadia Code",Menlo,Consolas,monospace; /* Police monospace (chiffres, codes) */
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; /* Police sans-serif (texte courant) */
+}
+
+/* ============================================================
+   RESET DE BASE
+   Supprime les marges/paddings par défaut du navigateur.
+   ============================================================ */
+*{box-sizing:border-box} /* Inclut padding et bordure dans la taille totale des éléments */
+html,body{margin:0}
+body{
+  background:var(--bg);
+  color:var(--ink);
+  font-family:var(--sans);
+  font-size:15px;
+  line-height:1.5;
+  -webkit-font-smoothing:antialiased /* Améliore le rendu du texte sur macOS/iOS */
+}
+
+/* Hérite de la police du body pour uniformiser les formulaires et boutons */
+button{font-family:inherit;cursor:pointer}
+input,textarea,select{font-family:inherit}
+
+/* Classe utilitaire : applique la police monospace à un élément */
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+
+/* Contour de focus visible pour l'accessibilité clavier */
+:focus-visible{outline:2px solid var(--teal);outline-offset:2px;border-radius:4px}
+
+
+/* ============================================================
+   BARRE DE NAVIGATION SUPÉRIEURE (App Bar)
+   Barre fixe en haut de page avec logo, navigation et infos utilisateur.
+   ============================================================ */
+.appbar{
+  display:flex;
+  align-items:center;
+  gap:14px;
+  height:60px;
+  padding:0 22px;
+  background:var(--surface);
+  border-bottom:1px solid var(--line);
+  position:sticky; /* Reste visible même en scrollant */
+  top:0;
+  z-index:20 /* Passe au-dessus du contenu */
+}
+
+/* Logo / marque de l'application */
+.brand{display:flex;align-items:center;gap:10px;font-weight:600;letter-spacing:-.01em}
+
+/* Icône ronde avec un dessin géométrique en pseudo-élément */
+.brand .dot{width:24px;height:24px;border-radius:7px;background:var(--teal);position:relative;flex:none}
+.brand .dot::after{
+  content:"";
+  position:absolute;
+  inset:6px;
+  border:2px solid #fff;
+  border-radius:50%;
+  clip-path:polygon(50% 0,100% 38%,82% 100%,18% 100%,0 38%) /* Forme pentagonale */
+}
+
+/* Sous-titre "OBE" affiché en petit à côté du nom */
+.brand small{font-weight:400;color:var(--ink-3);font-size:12px;letter-spacing:.04em;text-transform:uppercase}
+
+/* Espace vide flexible qui pousse les éléments suivants à droite */
+.appbar .spacer{flex:1}
+
+/* Zone d'infos contextuelles (nom utilisateur, rôle) */
+.ctx{display:flex;align-items:center;gap:10px;color:var(--ink-2);font-size:13.5px}
+
+/* Badge / étiquette colorée (ex: "Student", "Admin", "Lecturer") */
+.pill{font-size:12px;font-weight:500;padding:3px 10px;border-radius:20px;background:var(--teal-soft);color:var(--teal-2)}
+.pill.amber{background:var(--amber-soft);color:var(--amber)} /* Variante orange pour Lecturer */
+.pill.blue{background:#E6EEF7;color:#235184}               /* Variante bleue pour Admin */
+
+/* Ligne sélectionnée dans un tableau (fond bleuté) */
+tbody tr.on td{background:#EAF1FB}
+
+/* Bouton discret style lien (ex: "Sign out") */
+.linkbtn{border:none;background:none;color:var(--ink-2);font-size:13.5px;padding:6px 8px;border-radius:8px}
+.linkbtn:hover{background:var(--surface-2);color:var(--ink)}
+
+/* Navigation par onglets dans la barre du haut (Admin uniquement) */
+.topnav{display:flex;gap:2px;margin-left:6px}
+.topnav button{border:none;background:none;color:var(--ink-2);font-size:13.5px;font-weight:500;padding:7px 12px;border-radius:8px}
+.topnav button:hover{background:var(--surface-2);color:var(--ink)}
+.topnav button.on{background:var(--teal-soft);color:var(--teal-2)} /* Onglet actif */
+
+
+/* ============================================================
+   LÉGENDE DES PO ET CHIPS
+   Affichage des outcomes (PO1 à PO11) sous forme de badges cliquables.
+   ============================================================ */
+
+/* Liste de légende des PO (ex: "PO1 Computing knowledge") */
+.po-legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:11.5px;color:var(--ink-3);margin-bottom:14px}
+.po-legend b{color:var(--ink-2);font-family:var(--mono)}
+
+/* Conteneur de chips PO */
+.po-chips{display:flex;flex-wrap:wrap;gap:4px}
+
+/* Chip individuel représentant un PO avec son coefficient */
+.pochip{border:1px solid var(--line-2);background:var(--surface);color:var(--ink-3);font-family:var(--mono);font-size:11.5px;padding:3px 7px;border-radius:6px;cursor:pointer}
+.pochip:hover{border-color:var(--teal);color:var(--ink)}
+.pochip.on{background:var(--teal-soft);border-color:#CFE6DF;color:var(--teal-2);font-weight:600} /* Chip actif */
+
+/* Ligne d'ajout de cours (champs + bouton alignés horizontalement) */
+.addrow{display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap}
+
+/* Table de la matrice CO-PO en admin */
+table.matrix{min-width:1040px}
+table.matrix th,table.matrix td{padding:6px 6px}
+
+/* Cellule de saisie dans la matrice CO-PO */
+.cell-in.wcell{width:44px;padding:0;background:var(--surface);color:var(--ink-3)}
+.cell-in.wcell.on{background:var(--teal-soft);border-color:#CFE6DF;color:var(--teal-2);font-weight:600}
+
+
+/* ============================================================
+   CONTENEUR PRINCIPAL
+   Limite la largeur du contenu et centre la page.
+   ============================================================ */
+.wrap{max-width:1120px;margin:0 auto;padding:26px 22px 60px}
+
+
+/* ============================================================
+   BOUTONS
+   Différentes variantes de boutons réutilisables.
+   ============================================================ */
+.btn{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  border:1px solid var(--line-2);
+  background:var(--surface);
+  color:var(--ink);
+  padding:9px 14px;
+  border-radius:9px;
+  font-size:14px;
+  font-weight:500;
+  transition:background .12s,border-color .12s /* Animation douce au survol */
+}
+.btn:hover{background:var(--surface-2);border-color:var(--ink-3)}
+.btn.primary{background:var(--teal);border-color:var(--teal);color:#fff}  /* Bouton principal vert */
+.btn.primary:hover{background:var(--teal-2);border-color:var(--teal-2)}
+.btn.sm{padding:6px 11px;font-size:13px}                                   /* Variante petite taille */
+.btn.ghost{border-color:transparent;background:transparent}                /* Bouton sans fond ni bordure */
+.btn.ghost:hover{background:var(--surface-2)}
+
+
+/* ============================================================
+   CARTES (Cards)
+   Conteneurs blancs avec bordure et coins arrondis.
+   ============================================================ */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-lg);padding:20px}
+.card h2{margin:0 0 2px;font-size:15px;font-weight:600;letter-spacing:-.01em}
+.card .sub{color:var(--ink-3);font-size:12.5px;margin-bottom:14px} /* Sous-titre descriptif */
+
+
+/* ============================================================
+   PAGE DE CONNEXION
+   Formulaire centré avec un panneau de connexion.
+   ============================================================ */
+.login-stage{
+  min-height:calc(100vh - 60px); /* Hauteur plein écran moins la barre du haut */
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:24px
+}
+
+/* Panneau de connexion centré */
+.login-card{width:380px;max-width:100%;background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:30px;box-shadow:0 1px 0 var(--line)}
+.login-card .eyebrow{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--teal-2);font-weight:600} /* Texte chapeau */
+.login-card h1{font-size:21px;margin:6px 0 18px;letter-spacing:-.02em}
+
+/* Sélecteur de rôle (Student / Lecturer / Admin) : style d'onglets segmentés */
+.seg{display:flex;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:3px;margin-bottom:18px}
+.seg button{flex:1;border:none;background:none;padding:8px;border-radius:8px;font-size:13.5px;font-weight:500;color:var(--ink-2)}
+.seg button.on{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.06)} /* Onglet sélectionné */
+
+/* Champ de formulaire (label + input) */
+.field{margin-bottom:14px}
+.field label{display:block;font-size:12.5px;color:var(--ink-2);margin-bottom:6px;font-weight:500}
+.field input{width:100%;height:42px;padding:0 12px;border:1px solid var(--line-2);border-radius:9px;font-size:14.5px;background:var(--surface)}
+.field input:focus{border-color:var(--teal);outline:none;box-shadow:0 0 0 3px var(--teal-soft)} /* Anneau vert au focus */
+
+/* Texte d'aide sous le formulaire */
+.hint{font-size:12px;color:var(--ink-3);margin-top:14px;text-align:center}
+.hint code{font-family:var(--mono);background:var(--surface-2);padding:1px 5px;border-radius:5px;color:var(--ink-2)}
+
+
+/* ============================================================
+   GRILLES DE MISE EN PAGE
+   ============================================================ */
+
+/* Grille 2 colonnes (ex: radar + résumé) */
+.grid-2{display:grid;grid-template-columns:1.25fr 1fr;gap:18px}
+
+/* En-tête de section avec titre à gauche et actions à droite */
+.page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:18px;flex-wrap:wrap}
+.page-head h1{font-size:20px;margin:0;letter-spacing:-.02em}
+.page-head .meta{color:var(--ink-3);font-size:13px} /* Ligne de métadonnées (matric, session…) */
+
+
+/* ============================================================
+   TOGGLES (Interrupteurs)
+   Case à cocher stylisée comme un switch on/off.
+   ============================================================ */
+.toggles{display:flex;flex-direction:column;gap:10px}
+
+/* Conteneur du toggle avec son label */
+.tog{display:flex;align-items:center;gap:10px;font-size:13.5px;color:var(--ink);cursor:pointer;user-select:none}
+
+/* L'input checkbox caché, remplacé visuellement */
+.tog input{appearance:none;width:34px;height:20px;border-radius:20px;background:var(--line-2);position:relative;transition:background .15s;flex:none}
+.tog input:checked{background:var(--teal)} /* Fond vert quand activé */
+
+/* La pastille blanche qui glisse de gauche à droite */
+.tog input::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:transform .15s}
+.tog input:checked::after{transform:translateX(14px)} /* Déplacement vers la droite */
+
+/* Petit carré coloré pour les légendes */
+.swatch{width:11px;height:11px;border-radius:3px;flex:none}
+
+/* Tiret en pointillés rouge : représente la ligne seuil de 50% dans les légendes */
+.dash-key{width:16px;height:0;border-top:2px dashed var(--red);flex:none}
+
+/* Contrôle de navigation en forme de stepper (‹ valeur ›) */
+.stepper{display:inline-flex;align-items:center;border:1px solid var(--line-2);border-radius:9px;overflow:hidden}
+.stepper button{border:none;background:var(--surface);padding:7px 11px;font-size:14px;color:var(--ink-2)}
+.stepper button:hover{background:var(--surface-2);color:var(--ink)}
+.stepper .val{padding:7px 12px;font-size:13px;border-left:1px solid var(--line);border-right:1px solid var(--line);min-width:130px;text-align:center}
+
+
+/* ============================================================
+   TABLEAUX
+   Style global appliqué à tous les tableaux.
+   ============================================================ */
+table{border-collapse:collapse;width:100%}
+th,td{text-align:left;padding:9px 12px;font-size:13.5px;border-bottom:1px solid var(--line)}
+th{color:var(--ink-3);font-weight:500;font-size:11.5px;letter-spacing:.04em;text-transform:uppercase} /* En-têtes en petites majuscules */
+tbody tr:hover{background:var(--surface-2)} /* Surlignage au survol */
+td.num{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums} /* Cellule numérique alignée à droite */
+
+/* Badge de statut (ex: "met" / "below threshold") */
+.tag{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:500;padding:2px 9px;border-radius:20px}
+.tag.ok{background:var(--teal-soft);color:var(--teal-2)} /* Succès : vert */
+.tag.no{background:var(--red-soft);color:var(--red)}    /* Échec : rouge */
+
+
+/* ============================================================
+   VUE ENSEIGNANT : LISTE DES BATCHES (Master/Detail)
+   Barre latérale gauche + contenu principal à droite.
+   ============================================================ */
+.ld{display:grid;grid-template-columns:236px 1fr;gap:18px;align-items:start}
+
+/* Barre latérale de sélection des batches */
+.side{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-lg);padding:16px;position:sticky;top:78px}
+.side .io{display:grid;gap:8px;margin-bottom:16px} /* Groupe de boutons Import/Export */
+.side .label{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);margin:4px 0 8px}
+
+/* Liste des batches dans la sidebar */
+.blist{display:grid;gap:4px}
+
+/* Bouton de sélection d'un batch */
+.bitem{display:flex;align-items:center;justify-content:space-between;border:1px solid transparent;background:none;border-radius:9px;padding:9px 11px;text-align:left;font-size:14px;color:var(--ink)}
+.bitem:hover{background:var(--surface-2)}
+.bitem.on{background:var(--teal-soft);border-color:#CFE6DF;color:var(--teal-2);font-weight:500} /* Batch sélectionné */
+.bitem small{color:var(--ink-3);font-family:var(--mono);font-size:11.5px} /* Ex: "A251" (session) */
+.bitem.on small{color:var(--teal-2)}
+
+
+/* ============================================================
+   GRILLE ÉDITABLE (tableau scrollable horizontalement)
+   Utilisée pour la saisie des scores de cours par étudiant.
+   ============================================================ */
+.gridtbl{overflow-x:auto;border:1px solid var(--line);border-radius:12px}
+.gridtbl table{min-width:760px}
+.gridtbl th,.gridtbl td{border-right:1px solid var(--line);white-space:nowrap} /* Pas de retour à la ligne */
+.gridtbl th:last-child,.gridtbl td:last-child{border-right:none}
+
+/* Première colonne fixe qui reste visible lors du scroll horizontal */
+.gridtbl th.semcol,.gridtbl td.semcol{position:sticky;left:0;background:var(--surface);z-index:2}
+.gridtbl tbody tr:hover td.semcol{background:var(--surface-2)}
+
+/* Input numérique dans la grille (score 0-100) */
+.cell-in{width:58px;height:32px;border:1px solid var(--line);border-radius:7px;text-align:center;font-family:var(--mono);font-size:13.5px;background:var(--surface-2);color:var(--ink)}
+.cell-in:focus{border-color:var(--teal);background:var(--surface);outline:none;box-shadow:0 0 0 3px var(--teal-soft)}
+.cell-in.under{color:var(--red)} /* Score sous le seuil : affiché en rouge */
+
+
+/* ============================================================
+   ZONE DE COMMENTAIRE BATCH
+   Textarea avec bouton de sauvegarde.
+   ============================================================ */
+.comment textarea{width:100%;min-height:88px;border:1px solid var(--line-2);border-radius:10px;padding:11px 13px;font-size:14px;resize:vertical;background:var(--surface-2);color:var(--ink)}
+.comment textarea:focus{border-color:var(--teal);background:var(--surface);outline:none;box-shadow:0 0 0 3px var(--teal-soft)}
+
+/* Ligne de boutons alignée à droite (ex: "Cancel" + "Save") */
+.row-end{display:flex;justify-content:flex-end;gap:10px;margin-top:10px}
+
+/* Légende de graphique (couleur + label) */
+.legend{display:flex;flex-wrap:wrap;gap:14px;align-items:center;font-size:12.5px;color:var(--ink-2);margin-top:10px}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+
+
+/* ============================================================
+   TOAST (Notification éphémère)
+   Message qui apparaît en bas de l'écran, puis disparaît.
+   ============================================================ */
+#toast{
+  position:fixed;
+  left:50%;
+  bottom:26px;
+  transform:translateX(-50%) translateY(20px); /* Décalé vers le bas initialement */
+  background:var(--ink);
+  color:#fff;
+  padding:10px 16px;
+  border-radius:10px;
+  font-size:13.5px;
+  opacity:0;          /* Invisible par défaut */
+  pointer-events:none;
+  transition:opacity .2s,transform .2s; /* Animation d'apparition */
+  z-index:50
+}
+#toast.show{
+  opacity:1;
+  transform:translateX(-50%) translateY(0) /* Monte en position finale */
+}
+
+/* Message "vide" affiché quand une liste est vide */
+.empty{color:var(--ink-3);font-size:13.5px;padding:14px 2px}
+
+/* Police correcte pour les textes dans les SVG */
+svg text{font-family:var(--sans)}
+
+
+/* ============================================================
+   RESPONSIVE : MOBILE (écrans < 840px)
+   Passe les grilles à une seule colonne.
+   ============================================================ */
+@media (max-width:840px){
+  .grid-2{grid-template-columns:1fr}  /* 2 colonnes → 1 colonne */
+  .ld{grid-template-columns:1fr}      /* Sidebar + contenu → empilés */
+  .side{position:static}              /* Sidebar non sticky sur mobile */
+}
+
+/* ============================================================
+   ANIMATION D'ENTRÉE DES VUES
+   Chaque vue apparaît avec un léger fondu + glissement vers le haut.
+   Désactivée si l'utilisateur préfère réduire les animations (accessibilité).
+   ============================================================ */
+@media (prefers-reduced-motion:no-preference){
+  .view{animation:fade .25s ease}
+  @keyframes fade{
+    from{opacity:0;transform:translateY(4px)}
+    to{opacity:1;transform:none}
+  }
+}

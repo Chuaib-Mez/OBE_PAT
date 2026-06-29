@@ -1,43 +1,12 @@
-<!DOCTYPE html>
-<!-- Déclaration du type de document HTML5 -->
+<!doctype html>
 <html lang="en">
-<head>
-  <!-- Encodage des caractères : permet d'afficher les accents et caractères spéciaux -->
-  <meta charset="utf-8">
-
-  <!-- Rend la page responsive : s'adapte à la taille de l'écran -->
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-
-  <!-- Titre affiché dans l'onglet du navigateur -->
-  <title>PO Attainment Tracker — prototype</title>
-
-  <!-- Feuille de style CSS -->
-  <link rel="stylesheet" href="style.css">
-</head>
-<body>
-
-  <!-- Conteneur principal : tout le HTML de l'app est injecté ici par JavaScript -->
-  <div id="root"></div>
-
-  <!-- Notification toast : message temporaire affiché en bas de l'écran -->
-  <div id="toast"></div>
-
-  <!--
-    Scripts chargés dans l'ordre de dépendance :
-      1. data.js    — constantes, données métier, fonctions de calcul (base de tout)
-      2. charts.js  — graphiques SVG (dépend de data.js)
-      3. student.js — vue étudiant (dépend de data.js, charts.js, state.js)
-      4. lecturer.js — vues enseignant + import/export (dépend de data.js, charts.js, state.js)
-      5. admin.js   — console admin (dépend de data.js, charts.js, lecturer.js, state.js)
-      6. state.js   — état global, routeur, login, render — chargé en dernier car il appelle render()
-                       qui lui-même appelle les fonctions définies dans les fichiers précédents
-  -->
-  <script src="data.js"></script>
-  <script src="charts.js"></script>
-  <script src="student.js"></script>
-  <script src="lecturer.js"></script>
-  <script src="admin.js"></script>
-  <script src="state.js"></script>
-
-</body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PO Attainment Tracker</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
 </html>
