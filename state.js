@@ -15,7 +15,7 @@ const state = {
 
   /* Sous-état de la vue étudiant */
   student: {
-    id:       "s1",  /* ID interne de l'étudiant affiché */
+    id:       null,  /* ID interne de l'étudiant affiché — défini au login */
     sem:      1,     /* Semestre sélectionné (1..progress ou 'all') */
     showMine: true,  /* Afficher les scores perso sur le radar */
     showAvg:  false, /* Afficher la moyenne du batch sur le radar */
@@ -23,20 +23,20 @@ const state = {
 
   /* Sous-état de la vue enseignant */
   lect: {
-    batch:       "B7",  /* Batch sélectionné dans la sidebar */
+    batch:       null,  /* Batch sélectionné — défini au login */
     sem:         1,     /* Semestre sélectionné */
     compare:     false, /* Comparaison par année activée */
     compareYear: 2025,  /* Année de comparaison sélectionnée */
     studentId:   null,  /* ID de l'étudiant en vue détail */
-    lecturer:    "L1",  /* Enseignant connecté */
+    lecturer:    null,  /* Enseignant connecté — défini au login */
     filter:      "all", /* Filtre par enseignant (admin uniquement) */
   },
 
   /* Sous-état de la vue admin */
   admin: {
-    fileId:      null,  /* ID du fichier actuellement prévisualisé */
-    targetBatch: "B7",  /* Batch cible sélectionné pour l'import */
-    editSemCi:   -1,    /* Index du cours dont on édite le semestre (-1 = aucun) */
+    fileId:      null,                       /* ID du fichier actuellement prévisualisé */
+    targetBatch: Object.keys(BATCHES)[0],    /* Premier batch disponible */
+    editSemCi:   -1,                         /* Index du cours dont on édite le semestre (-1 = aucun) */
   },
 };
 
@@ -119,26 +119,17 @@ function viewLogin() {
 
     <!-- Champs : matricule pour l'étudiant, username+password pour les autres -->
     ${loginRole === 'student' ? `
-      <div class="field"><label>Student ID (matric)</label><input id="li-id" value="A21EC0120" autocomplete="off"></div>
+      <div class="field"><label>Student ID (matric)</label><input id="li-id" placeholder="Enter your matric number" autocomplete="off"></div>
     ` : `
       <div class="field"><label>Username</label>
-        <input id="li-id" value="${loginRole === 'admin' ? 'admin.sec' : 'lee.staff'}" autocomplete="off">
+        <input id="li-id" placeholder="Enter your username" autocomplete="off">
       </div>
-      <div class="field"><label>Password</label><input id="li-pw" type="password" value="demo"></div>
+      <div class="field"><label>Password</label><input id="li-pw" type="password" placeholder="Enter your password"></div>
     `}
 
     <button class="btn primary" style="width:100%;justify-content:center;height:42px" onclick="doLogin()">
       ${loginRole === 'student' ? 'View my results' : loginRole === 'admin' ? 'Open admin console' : 'Open lecturer space'}
     </button>
-
-    <!-- Aide : exemples de credentials pour la démo -->
-    <div class="hint">
-      ${loginRole === 'student'
-        ? 'Try <code>A21EC0120</code> to <code>A21EC0125</code>'
-        : loginRole === 'lecturer'
-        ? 'Try <code>lee.staff</code>, <code>siti.staff</code>, <code>raj.staff</code>'
-        : 'Demo: credentials pre-filled'}
-    </div>
   </div></div>`;
 }
 
