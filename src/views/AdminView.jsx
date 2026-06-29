@@ -1,15 +1,10 @@
 /* ============================================================
    views/AdminView.jsx — Console d'administration (Registrar)
-   Remplace la fonction viewAdmin() de admin.js (version vanilla).
-
-   Contient trois sections :
-     1. Assignation des batches aux enseignants
-     2. Matrice CO-PO éditable (coefficients des cours par PO)
-     3. Registre des fichiers importés (view / download / delete)
-
-   Les actions sur les données dispatche vers le reducer dans AppContext.
-   Les refs (codeRef, nameRef, semRef) permettent de lire les inputs
-   non contrôlés sans provoquer de re-rendu à chaque frappe.
+   Quatre sections :
+     1. Gestion des utilisateurs (import Excel + tableau + changement de rôle)
+     2. Assignation des batches aux enseignants
+     3. Matrice CO-PO éditable
+     4. Registre des fichiers de scores importés
    ============================================================ */
 
 import { useRef } from 'react';
@@ -19,46 +14,97 @@ import { POS, PO_LABELS, PASS } from '../data/index.js';
 
 export default function AdminView() {
   const { state, dispatch, toast } = useApp();
-  const { admin, courses, lecturers, batches, imports } = state;
+  const { admin, courses, lecturers, batches, students, imports } = state;
 
-  /* Référence à l'input fichier caché pour l'import admin */
-  const fileRef = useRef(null);
-  /* Références aux inputs du formulaire "Ajouter un cours" */
+  /* Refs pour les fichiers cachés */
+  const stuFileRef  = useRef(null); /* Import Excel étudiants */
+  const lecFileRef  = useRef(null); /* Import Excel enseignants */
+  const scoreFileRef = useRef(null); /* Import CSV scores */
+
+  /* Refs pour le formulaire "Ajouter un cours" */
   const codeRef = useRef(null);
   const nameRef = useRef(null);
   const semRef  = useRef(null);
 
-  /* Ajoute un nouveau cours avec des coefficients vides */
-  const addCourse = () => {
-    const code = (codeRef.current?.value || '').trim();
-    const name = (nameRef.current?.value || '').trim();
-    const sem  = Math.max(1, Math.min(8, parseInt(semRef.current?.value || 1, 10)));
-    if (!code && !name) { toast('Enter a code and name'); return; }
-    dispatch({ type: 'ADD_COURSE', code, name, sem });
-    toast('Course added');
-    /* Réinitialise les champs après ajout */
-    if (codeRef.current) codeRef.current.value = '';
-    if (nameRef.current) nameRef.current.value = '';
-    if (semRef.current)  semRef.current.value  = '';
-  };
 
-  /* Télécharge un fichier du registre au format CSV */
-  const dlFile = (id) => {
-    const f = imports.find(x => x.id === id);
+  /* ============================================================
+     IMPORT EXCEL — ÉTUDIANTS
+     Format attendu : nom, prenom, batch, programme
+     Le matricule est généré automatiquement.
+  ============================================================ */
+  const onImportStudents = (e) => {
+    const f = e.target.files[0];
     if (!f) return;
-    let rows = [['Matric', 'Name', 'Course', 'Attainment']];
-    f.rows.forEach(r => rows.push([r.matric, r.name, r.course, r.att]));
-    const csv = rows
-      .map(r => r.map(c => /[",\n]/.test(String(c)) ? `"${String(c).replace(/"/g, '""')}"` : c).join(','))
-      .join('\n');
-    const a  = document.createElement('a');
-    a.href   = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
-    a.download = f.filename.replace(/\.[^.]+$/, '') + '.csv';
-    a.click();
-    toast('Download: ' + f.filename);
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const lines = reader.result.split(/\r?\n/).filter(l => l.trim());
+        const head  = lines.shift().split(',').map(h => h.trim().toLowerCase());
+        /* Détection des colonnes */
+        const iN = head.indexOf('nom'), iP = head.indexOf('prenom'),
+              iB = head.indexOf('batch'), iPr = head.indexOf('programme');
+        if (iN < 0 || iP < 0) { toast('Colonnes requises : nom, prenom, batch, programme'); return; }
+
+        const rows = [];
+        lines.forEach(l => {
+          const c         = l.split(',');
+          const lastName  = (c[iN]  || '').trim();
+          const firstName = (c[iP]  || '').trim();
+          const batchId   = (c[iB]  || '').trim().toUpperCase();
+          const program   = (c[iPr] || '').trim();
+          if (!lastName && !firstName) return;
+          rows.push({ firstName, lastName, batchId, program });
+        });
+
+        dispatch({ type: 'IMPORT_STUDENTS_EXCEL', rows });
+        toast(`${rows.length} étudiant(s) importé(s)`);
+      } catch { toast('Impossible de lire le fichier'); }
+    };
+    reader.readAsText(f);
+    e.target.value = '';
   };
 
-  /* Intercepte le fichier sélectionné par l'admin et lance l'import vers le batch cible */
+
+  /* ============================================================
+     IMPORT EXCEL — ENSEIGNANTS
+     Format attendu : nom, prenom, cours (séparés par "|"), batch
+  ============================================================ */
+  const onImportLecturers = (e) => {
+    const f = e.target.files[0];
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const lines = reader.result.split(/\r?\n/).filter(l => l.trim());
+        const head  = lines.shift().split(',').map(h => h.trim().toLowerCase());
+        const iN = head.indexOf('nom'), iP = head.indexOf('prenom'),
+              iC = head.indexOf('cours'), iB = head.indexOf('batch');
+        if (iN < 0 || iP < 0) { toast('Colonnes requises : nom, prenom, cours, batch'); return; }
+
+        const rows = [];
+        lines.forEach(l => {
+          const c         = l.split(',');
+          const lastName  = (c[iN] || '').trim();
+          const firstName = (c[iP] || '').trim();
+          /* Les cours sont séparés par "|" dans leur cellule : "CS101|CS210" */
+          const courses   = iC >= 0 ? (c[iC] || '').split('|').map(x => x.trim().toUpperCase()).filter(Boolean) : [];
+          const batchId   = iB >= 0 ? (c[iB] || '').trim().toUpperCase() : '';
+          if (!lastName && !firstName) return;
+          rows.push({ firstName, lastName, courses, batchId });
+        });
+
+        dispatch({ type: 'IMPORT_LECTURERS_EXCEL', rows });
+        toast(`${rows.length} enseignant(s) importé(s)`);
+      } catch { toast('Impossible de lire le fichier'); }
+    };
+    reader.readAsText(f);
+    e.target.value = '';
+  };
+
+
+  /* ============================================================
+     IMPORT CSV SCORES (section fichiers importés)
+  ============================================================ */
   const onAdminImport = (e) => {
     const f = e.target.files[0];
     if (!f) return;
@@ -80,12 +126,43 @@ export default function AdminView() {
           rows.push({ matric, name: iN >= 0 ? (c[iN] || matric).trim() : matric, course, att });
         });
         dispatch({ type: 'IMPORT_FILE', filename: f.name, batchId: admin.targetBatch, rows });
-        toast(`${rows.length} rows imported`);
-      } catch { toast('Could not read file'); }
+        toast(`${rows.length} scores importés`);
+      } catch { toast('Impossible de lire le fichier'); }
     };
     reader.readAsText(f);
     e.target.value = '';
   };
+
+  /* Téléchargement d'un fichier de scores */
+  const dlFile = (id) => {
+    const f = imports.find(x => x.id === id);
+    if (!f) return;
+    let rows = [['Matric', 'Name', 'Course', 'Attainment']];
+    f.rows.forEach(r => rows.push([r.matric, r.name, r.course, r.att]));
+    const csv = rows.map(r => r.map(c => /[",\n]/.test(String(c)) ? `"${String(c).replace(/"/g, '""')}"` : c).join(',')).join('\n');
+    const a = document.createElement('a');
+    a.href   = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+    a.download = f.filename.replace(/\.[^.]+$/, '') + '.csv';
+    a.click();
+    toast('Download: ' + f.filename);
+  };
+
+  /* Ajout d'un cours dans la matrice CO-PO */
+  const addCourse = () => {
+    const code = (codeRef.current?.value || '').trim();
+    const name = (nameRef.current?.value || '').trim();
+    const sem  = Math.max(1, Math.min(8, parseInt(semRef.current?.value || 1, 10)));
+    if (!code && !name) { toast('Enter a code and name'); return; }
+    dispatch({ type: 'ADD_COURSE', code, name, sem });
+    toast('Course added');
+    if (codeRef.current) codeRef.current.value = '';
+    if (nameRef.current) nameRef.current.value = '';
+    if (semRef.current)  semRef.current.value  = '';
+  };
+
+  /* Liste combinée de tous les utilisateurs pour le tableau de gestion */
+  const allStudents  = Object.values(students);
+  const allLecturers = Object.values(lecturers);
 
   /* Fichier sélectionné pour la prévisualisation */
   const sel = admin.fileId ? imports.find(f => f.id === admin.fileId) : null;
@@ -98,12 +175,102 @@ export default function AdminView() {
         <div className="page-head">
           <div>
             <h1>Administration console</h1>
-            <div className="meta">Registrar · curriculum & imported files</div>
+            <div className="meta">Registrar · gestion des utilisateurs, curriculum et fichiers importés</div>
           </div>
         </div>
 
-        {/* ---- Section 1 : assignation des batches aux enseignants ---- */}
+
+        {/* ============================================================
+            SECTION 1 — GESTION DES UTILISATEURS
+        ============================================================ */}
         <div className="card">
+          <div className="page-head" style={{ marginBottom: 10 }}>
+            <div>
+              <h2 style={{ fontSize: 15 }}>User management</h2>
+              <div className="sub">Import des étudiants et enseignants · gestion des rôles</div>
+            </div>
+            {/* Boutons d'import */}
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <div>
+                <button className="btn primary sm" onClick={() => stuFileRef.current?.click()}>
+                  ⬆ Import étudiants
+                </button>
+                <div className="meta" style={{ marginTop: 3 }}>Format : nom, prenom, batch, programme</div>
+                <input ref={stuFileRef} type="file" accept=".csv" hidden onChange={onImportStudents} />
+              </div>
+              <div>
+                <button className="btn sm" onClick={() => lecFileRef.current?.click()}>
+                  ⬆ Import enseignants
+                </button>
+                <div className="meta" style={{ marginTop: 3 }}>Format : nom, prenom, cours, batch</div>
+                <input ref={lecFileRef} type="file" accept=".csv" hidden onChange={onImportLecturers} />
+              </div>
+            </div>
+          </div>
+
+          {/* Tableau de tous les utilisateurs */}
+          <table>
+            <thead>
+              <tr>
+                <th>Nom</th>
+                <th>Prénom</th>
+                <th>Rôle</th>
+                <th>Détails</th>
+                <th style={{ textAlign: 'right' }}>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {/* Étudiants */}
+              {allStudents.map(s => (
+                <tr key={s.id}>
+                  <td>{s.lastName || '—'}</td>
+                  <td>{s.firstName || s.name}</td>
+                  <td><span className="pill">Student</span></td>
+                  <td className="meta">
+                    {s.matric} · {batches[s.batch]?.name ?? s.batch} · {s.program || '—'}
+                  </td>
+                  <td style={{ textAlign: 'right' }}>
+                    <button
+                      className="btn ghost sm"
+                      onClick={() => { dispatch({ type: 'SET_USER_ROLE', userId: s.id, currentRole: 'student', newRole: 'lecturer' }); toast(`${s.name} → Lecturer`); }}
+                    >
+                      → Make lecturer
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {/* Enseignants */}
+              {allLecturers.map(l => (
+                <tr key={l.id}>
+                  <td>{l.lastName || '—'}</td>
+                  <td>{l.firstName || l.name}</td>
+                  <td><span className="pill amber">Lecturer</span></td>
+                  <td className="meta">
+                    {l.login} · {batches[l.batch]?.name ?? (l.batch || '—')} · {l.courses?.length ? l.courses.join(', ') : 'No courses'}
+                  </td>
+                  <td style={{ textAlign: 'right' }}>
+                    <button
+                      className="btn ghost sm"
+                      onClick={() => { dispatch({ type: 'SET_USER_ROLE', userId: l.id, currentRole: 'lecturer', newRole: 'student' }); toast(`${l.name} → Student`); }}
+                    >
+                      → Make student
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {/* État vide */}
+              {!allStudents.length && !allLecturers.length && (
+                <tr><td colSpan={5} className="empty">Aucun utilisateur. Importez un fichier Excel.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+
+        {/* ============================================================
+            SECTION 2 — ASSIGNATION DES BATCHES AUX ENSEIGNANTS
+        ============================================================ */}
+        <div className="card" style={{ marginTop: 16 }}>
           <div className="page-head" style={{ marginBottom: 10 }}>
             <div>
               <h2 style={{ fontSize: 15 }}>Lecturers & batches</h2>
@@ -112,11 +279,7 @@ export default function AdminView() {
           </div>
           <table>
             <thead>
-              <tr>
-                <th>Batch</th><th>Year</th><th>Session</th>
-                <th style={{ textAlign: 'right' }}>Students</th>
-                <th>Responsible lecturer</th>
-              </tr>
+              <tr><th>Batch</th><th>Year</th><th>Session</th><th style={{ textAlign: 'right' }}>Students</th><th>Responsible lecturer</th></tr>
             </thead>
             <tbody>
               {Object.entries(batches).map(([id, b]) => (
@@ -126,7 +289,6 @@ export default function AdminView() {
                   <td className="mono">{b.session}</td>
                   <td className="num">{b.students.length}</td>
                   <td>
-                    {/* Sélecteur : change l'enseignant responsable et dispatch SET_BATCH_OWNER */}
                     <select
                       value={b.owner}
                       onChange={e => { dispatch({ type: 'SET_BATCH_OWNER', batchId: id, lid: e.target.value }); toast('Assignment updated'); }}
@@ -135,6 +297,7 @@ export default function AdminView() {
                       {Object.entries(lecturers).map(([lid, l]) => (
                         <option key={lid} value={lid}>{l.name}</option>
                       ))}
+                      {!Object.keys(lecturers).length && <option value="">— No lecturer —</option>}
                     </select>
                   </td>
                 </tr>
@@ -143,76 +306,52 @@ export default function AdminView() {
           </table>
         </div>
 
-        {/* ---- Section 2 : matrice CO-PO éditable ---- */}
+
+        {/* ============================================================
+            SECTION 3 — MATRICE CO-PO
+        ============================================================ */}
         <div className="card" style={{ marginTop: 16 }}>
           <div className="page-head" style={{ marginBottom: 10 }}>
             <div>
               <h2 style={{ fontSize: 15 }}>Courses & PO mapping</h2>
-              <div className="sub">CO-PO matrix · enter a coefficient (0 = no contribution) · PO attainment = weighted average</div>
+              <div className="sub">CO-PO matrix · coefficient 0 = pas de contribution · atteinte PO = moyenne pondérée</div>
             </div>
           </div>
-
-          {/* Légende des POs */}
           <div className="po-legend">
-            {POS.map((p, i) => (
-              <span key={p} title={PO_LABELS[i]}><b>{p}</b> {PO_LABELS[i]}</span>
-            ))}
+            {POS.map((p, i) => <span key={p} title={PO_LABELS[i]}><b>{p}</b> {PO_LABELS[i]}</span>)}
           </div>
-
-          {/* Tableau de la matrice */}
           <div className="gridtbl">
             <table className="matrix">
               <thead>
                 <tr>
                   <th className="semcol" style={{ minWidth: 200 }}>PO / Course</th>
                   {courses.map((c, ci) => {
-                    const editing = admin.editSemCi === ci; /* Ce cours est-il en mode édition de semestre ? */
+                    const editing = admin.editSemCi === ci;
                     return (
                       <th key={c.code} style={{ textAlign: 'center', minWidth: 120 }}>
                         <div className="mono" style={{ fontWeight: 600 }}>{c.code}</div>
                         <div className="ts" style={{ color: 'var(--ink-3)', fontWeight: 400 }}>{c.name}</div>
                         <div style={{ display: 'flex', gap: 5, justifyContent: 'center', alignItems: 'center', marginTop: 4 }}>
                           {editing ? (
-                            /* Mode édition : input numérique + bouton "valider" */
                             <>
                               <span className="ts" style={{ color: 'var(--ink-3)' }}>Semester</span>
-                              <input
-                                className="cell-in"
-                                style={{ width: 40 }}
-                                type="number"
-                                min={1}
-                                max={8}
-                                defaultValue={c.semester}
-                                onChange={e => dispatch({ type: 'SET_COURSE_SEM', ci, val: e.target.value })}
-                              />
-                              <button
-                                className="btn ghost sm"
-                                style={{ padding: '2px 6px' }}
-                                onClick={() => dispatch({ type: 'SET_ADMIN', patch: { editSemCi: -1 } })}
-                                aria-label="Done"
-                              >✓</button>
+                              <input className="cell-in" style={{ width: 40 }} type="number" min={1} max={8} defaultValue={c.semester}
+                                onChange={e => dispatch({ type: 'SET_COURSE_SEM', ci, val: e.target.value })} />
+                              <button className="btn ghost sm" style={{ padding: '2px 6px' }}
+                                onClick={() => dispatch({ type: 'SET_ADMIN', patch: { editSemCi: -1 } })} aria-label="Done">✓</button>
                             </>
                           ) : (
-                            /* Mode affichage : texte + bouton "modifier" */
                             <>
                               <span className="ts" style={{ color: 'var(--ink-2)' }}>Semester {c.semester}</span>
-                              <button
-                                className="btn ghost sm"
-                                style={{ padding: '2px 6px' }}
-                                onClick={() => dispatch({ type: 'SET_ADMIN', patch: { editSemCi: ci } })}
-                                aria-label="Edit semester"
-                              >✎</button>
+                              <button className="btn ghost sm" style={{ padding: '2px 6px' }}
+                                onClick={() => dispatch({ type: 'SET_ADMIN', patch: { editSemCi: ci } })} aria-label="Edit semester">✎</button>
                             </>
                           )}
                         </div>
-                        {/* Bouton suppression du cours */}
                         <div style={{ marginTop: 3 }}>
-                          <button
-                            className="btn ghost sm"
-                            style={{ padding: '2px 7px' }}
+                          <button className="btn ghost sm" style={{ padding: '2px 7px' }}
                             onClick={() => { dispatch({ type: 'DEL_COURSE', ci }); toast('Course deleted'); }}
-                            aria-label="Delete course"
-                          >✕</button>
+                            aria-label="Delete course">✕</button>
                         </div>
                       </th>
                     );
@@ -220,7 +359,6 @@ export default function AdminView() {
                 </tr>
               </thead>
               <tbody>
-                {/* Une ligne = un PO ; chaque cellule = un coefficient modifiable */}
                 {POS.map((p, pi) => (
                   <tr key={p}>
                     <td className="semcol" style={{ minWidth: 200 }}>
@@ -229,14 +367,9 @@ export default function AdminView() {
                     </td>
                     {courses.map((c, ci) => (
                       <td key={c.code} style={{ textAlign: 'center' }}>
-                        <input
-                          className={`cell-in wcell ${c.w[pi] > 0 ? 'on' : ''}`}
-                          type="number"
-                          min={0}
-                          step={1}
+                        <input className={`cell-in wcell ${c.w[pi] > 0 ? 'on' : ''}`} type="number" min={0} step={1}
                           defaultValue={c.w[pi] || 0}
-                          onChange={e => dispatch({ type: 'SET_COURSE_W', ci, pi, val: e.target.value })}
-                        />
+                          onChange={e => dispatch({ type: 'SET_COURSE_W', ci, pi, val: e.target.value })} />
                       </td>
                     ))}
                   </tr>
@@ -244,8 +377,6 @@ export default function AdminView() {
               </tbody>
             </table>
           </div>
-
-          {/* Formulaire d'ajout d'un nouveau cours */}
           <div className="addrow">
             <input ref={codeRef} className="cell-in" style={{ width: 96, textAlign: 'left' }} placeholder="Code (e.g. CS401)" />
             <input ref={nameRef} className="cell-in" style={{ width: 230, textAlign: 'left' }} placeholder="Course name" />
@@ -255,15 +386,17 @@ export default function AdminView() {
           </div>
         </div>
 
-        {/* ---- Section 3 : registre des fichiers importés ---- */}
+
+        {/* ============================================================
+            SECTION 4 — REGISTRE DES FICHIERS DE SCORES
+        ============================================================ */}
         <div className="card" style={{ marginTop: 16 }}>
           <div className="page-head" style={{ marginBottom: 10 }}>
             <div>
-              <h2 style={{ fontSize: 15 }}>Imported Excel files</h2>
-              <div className="sub">Full registry · view, download, delete</div>
+              <h2 style={{ fontSize: 15 }}>Imported score files</h2>
+              <div className="sub">Registre complet · voir, télécharger, supprimer</div>
             </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-              {/* Sélecteur du batch cible avant l'import */}
               <select
                 value={admin.targetBatch}
                 onChange={e => dispatch({ type: 'SET_ADMIN', patch: { targetBatch: e.target.value } })}
@@ -273,18 +406,13 @@ export default function AdminView() {
                   <option key={id} value={id}>{b.name} · {b.year}</option>
                 ))}
               </select>
-              <button className="btn primary sm" onClick={() => fileRef.current?.click()}>⬆ Import</button>
-              {/* Input fichier caché pour l'import admin */}
-              <input ref={fileRef} type="file" accept=".csv" hidden onChange={onAdminImport} />
+              <button className="btn primary sm" onClick={() => scoreFileRef.current?.click()}>⬆ Import scores</button>
+              <input ref={scoreFileRef} type="file" accept=".csv" hidden onChange={onAdminImport} />
             </div>
           </div>
           <table>
             <thead>
-              <tr>
-                <th>File</th><th>Batch</th><th>Imported on</th>
-                <th style={{ textAlign: 'right' }}>Rows</th>
-                <th />
-              </tr>
+              <tr><th>File</th><th>Batch</th><th>Imported on</th><th style={{ textAlign: 'right' }}>Rows</th><th /></tr>
             </thead>
             <tbody>
               {imports.length ? imports.map(f => (
@@ -299,14 +427,12 @@ export default function AdminView() {
                     <button className="btn ghost sm" onClick={() => { dispatch({ type: 'DEL_FILE', id: f.id }); toast('File deleted'); }}>Delete</button>
                   </td>
                 </tr>
-              )) : (
-                <tr><td colSpan={5} className="empty">No file imported.</td></tr>
-              )}
+              )) : <tr><td colSpan={5} className="empty">No file imported.</td></tr>}
             </tbody>
           </table>
         </div>
 
-        {/* ---- Prévisualisation du fichier sélectionné ---- */}
+        {/* Prévisualisation du fichier de scores sélectionné */}
         {sel && (
           <div className="card" style={{ marginTop: 16 }}>
             <div className="page-head" style={{ marginBottom: 10 }}>
@@ -321,16 +447,13 @@ export default function AdminView() {
             </div>
             <div className="gridtbl">
               <table>
-                <thead>
-                  <tr><th className="semcol">Matric</th><th>Name</th><th>Course</th><th>Attainment</th></tr>
-                </thead>
+                <thead><tr><th className="semcol">Matric</th><th>Name</th><th>Course</th><th>Attainment</th></tr></thead>
                 <tbody>
                   {sel.rows.map((r, i) => (
                     <tr key={i}>
                       <td className="semcol mono">{r.matric}</td>
                       <td>{r.name}</td>
                       <td className="mono">{r.course}</td>
-                      {/* Score en rouge si en-dessous du seuil */}
                       <td className="num" style={r.att < PASS ? { color: 'var(--red)' } : {}}>{r.att}</td>
                     </tr>
                   ))}

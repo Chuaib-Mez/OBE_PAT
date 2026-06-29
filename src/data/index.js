@@ -1,12 +1,11 @@
 /* ============================================================
    data/index.js — Constantes, données initiales et fonctions de calcul
    Module ES pur : aucune dépendance React.
-   Exporté vers AppContext (données) et les vues (calculs).
    ============================================================ */
 
 
 /* ---- Seuil de réussite ---- */
-export const PASS = 50; /* Un PO est "atteint" si le score >= 50 % */
+export const PASS = 50;
 
 /* ---- Liste des 11 Programme Outcomes ---- */
 export const POS = Array.from({ length: 11 }, (_, i) => 'PO' + (i + 1));
@@ -26,6 +25,18 @@ export const PO_LABELS = [
   "Lifelong learning",
 ];
 
+/* ---- Programmes disponibles dans l'établissement ---- */
+export const PROGRAMS = [
+  "Engineering",
+  "Programming",
+  "Networking",
+  "Data Science",
+  "Cybersecurity",
+];
+
+/* ---- Identifiants de l'administrateur (prototype) ---- */
+export const ADMIN_CREDENTIALS = { login: "admin", password: "admin" };
+
 
 /* ============================================================
    MATRICE CO-PO
@@ -34,7 +45,6 @@ export const PO_LABELS = [
 /*
   Construit un tableau de 11 coefficients depuis un dictionnaire.
   Exemple : W({0:2, 2:1}) → [2, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0]
-  Index 0 = PO1, index 1 = PO2, etc.
 */
 export function W(map) {
   const a = Array(11).fill(0);
@@ -42,7 +52,7 @@ export function W(map) {
   return a;
 }
 
-/* Liste initiale des cours du programme (curriculum de référence) */
+/* Curriculum de référence */
 export const INITIAL_COURSES = [
   { code: "CS101", name: "Programming Fundamentals",  semester: 1, w: W({ 0: 2, 2: 1 }) },
   { code: "CS110", name: "Engineering Mathematics 1", semester: 1, w: W({ 0: 1, 1: 2 }) },
@@ -59,60 +69,106 @@ export const INITIAL_COURSES = [
 
 
 /* ============================================================
-   ENSEIGNANTS
+   DONNÉES DE TEST
+   Un seul étudiant, un seul enseignant — suffisant pour valider
+   toutes les fonctionnalités sans données fictives.
    ============================================================ */
-export const INITIAL_LECTURERS = {
-  L1: { name: "Dr. Lee Wei",     login: "lee.staff" },
-  L2: { name: "Dr. Siti Aminah", login: "siti.staff" },
-  L3: { name: "Dr. Raj Kumar",   login: "raj.staff" },
+
+/*
+  Modèle étudiant :
+    id, firstName, lastName, name, matric, batch, program, courseScores
+*/
+export const INITIAL_STUDENTS = {
+  test_s1: {
+    id:           "test_s1",
+    firstName:    "Ahmad",
+    lastName:     "Ali",
+    name:         "Ahmad Ali",
+    matric:       "A251001",  /* Généré : session du batch + numéro d'ordre */
+    batch:        "B7",
+    program:      "Engineering",
+    courseScores: {},
+  },
 };
 
-
-/* ============================================================
-   ANNÉES DE COMPARAISON
-   ============================================================ */
-export const CUR_YEAR = 2026;
-export const COMPARE_YEARS = [2025, 2024, 2023, 2022]; /* Du plus récent au plus ancien */
+/*
+  Modèle enseignant :
+    id, firstName, lastName, name, login, courses (codes des cours enseignés), batch (batch référent)
+*/
+export const INITIAL_LECTURERS = {
+  L1: {
+    id:        "L1",
+    firstName: "Lee",
+    lastName:  "Wei",
+    name:      "Dr. Lee Wei",
+    login:     "lee.staff",
+    courses:   [],   /* Codes des cours dont cet enseignant est responsable */
+    batch:     "B7", /* Batch dont il est le référent */
+  },
+};
 
 
 /* ============================================================
    PROMOTIONS (BATCHES)
-   progress = dernier semestre enseigné pour cette promotion.
-   students = liste vide au départ, remplie via l'import CSV.
+   Tous les batches sont initialement rattachés au seul enseignant test (L1).
    ============================================================ */
-export const INITIAL_BATCHES = {
-  B7: { num: 7, name: "Batch 7", year: CUR_YEAR, session: "A251", progress: 3, owner: "L1", comment: "", students: [] },
-  B6: { num: 6, name: "Batch 6", year: CUR_YEAR, session: "A242", progress: 8, owner: "L2", comment: "", students: [] },
-  B5: { num: 5, name: "Batch 5", year: CUR_YEAR, session: "A232", progress: 8, owner: "L1", comment: "", students: [] },
-  B4: { num: 4, name: "Batch 4", year: CUR_YEAR, session: "A222", progress: 8, owner: "L3", comment: "", students: [] },
-};
+export const CUR_YEAR = 2026;
+export const COMPARE_YEARS = [2025, 2024, 2023, 2022];
 
-/* Dictionnaire des étudiants — vide au démarrage, alimenté par l'import */
-export const INITIAL_STUDENTS = {};
+export const INITIAL_BATCHES = {
+  B7: { num: 7, name: "Batch 7", year: CUR_YEAR, session: "A251", progress: 3, owner: "L1", comment: "", students: ["test_s1"] },
+  B6: { num: 6, name: "Batch 6", year: CUR_YEAR, session: "A242", progress: 8, owner: "L1", comment: "", students: [] },
+  B5: { num: 5, name: "Batch 5", year: CUR_YEAR, session: "A232", progress: 8, owner: "L1", comment: "", students: [] },
+  B4: { num: 4, name: "Batch 4", year: CUR_YEAR, session: "A222", progress: 8, owner: "L1", comment: "", students: [] },
+};
 
 
 /* ============================================================
-   FONCTIONS DE CALCUL
-   Toutes ces fonctions sont pures : elles reçoivent les données
-   en paramètre au lieu de lire des variables globales.
+   UTILITAIRES D'IMPORT
    ============================================================ */
 
-/* Moyenne arithmétique, arrondie à l'entier */
+/*
+  Génère un matricule unique pour un étudiant importé.
+  Format : {session du batch}{numéro d'ordre sur 3 chiffres}
+  Exemple : "A251" + 3 étudiants existants → "A251004"
+*/
+export function generateMatric(batchId, batches) {
+  const batch = batches[batchId];
+  if (!batch) return 'USR' + Date.now().toString().slice(-5);
+  const n = batch.students.length + 1;
+  return batch.session + String(n).padStart(3, '0');
+}
+
+/*
+  Génère un login unique pour un enseignant importé.
+  Format : {prenom}.{nom}.staff (minuscules, sans accents)
+  Exemple : "Lee", "Wei" → "lee.wei.staff"
+*/
+export function generateLogin(firstName, lastName) {
+  const clean = s => s.toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '') /* Supprime les accents */
+    .replace(/\s+/g, '');
+  return `${clean(firstName)}.${clean(lastName)}.staff`;
+}
+
+
+/* ============================================================
+   FONCTIONS DE CALCUL (pures — reçoivent les données en paramètre)
+   ============================================================ */
+
 export function mean(a) {
   return a.length ? Math.round(a.reduce((s, v) => s + v, 0) / a.length) : 0;
 }
 
-/* Moyenne pondérée. pairs = [[valeur, poids], ...] */
 export function wmean(pairs) {
   let sw = 0, swv = 0;
   for (const [v, w] of pairs) { sw += w; swv += v * w; }
   return sw > 0 ? Math.round(swv / sw) : 0;
 }
 
-/* Alias lisible de mean() */
 export function avgOf(a) { return mean(a); }
 
-/* Retourne [1, 2, ..., progress, 'all'] — liste des semestres navigables */
+/* Retourne [1, 2, ..., progress, 'all'] */
 export function semOrder(progress) {
   const a = [];
   for (let i = 1; i <= progress; i++) a.push(i);
@@ -120,7 +176,6 @@ export function semOrder(progress) {
   return a;
 }
 
-/* Retourne les cours d'un étudiant triés par semestre */
 export function studentCourses(stu, courses) {
   return courses
     .filter(c => c.code in stu.courseScores)
@@ -128,10 +183,6 @@ export function studentCourses(stu, courses) {
     .sort((a, b) => a.semester - b.semester);
 }
 
-/*
-  Calcule les 11 scores PO d'un étudiant.
-  uptoSem : numéro de semestre max, ou 'all' pour tout inclure.
-*/
 export function studentPO(stu, uptoSem, courses) {
   return POS.map((_, p) => {
     const pairs = courses
@@ -141,17 +192,12 @@ export function studentPO(stu, uptoSem, courses) {
   });
 }
 
-/*
-  Atteinte d'un cours pour un batch entier = moyenne des scores de tous les étudiants.
-  Retourne null si aucune donnée disponible.
-*/
 export function courseAttainment(batchId, code, batches, students) {
   const ids = batches[batchId].students.filter(id => code in students[id].courseScores);
   if (!ids.length) return null;
   return mean(ids.map(id => students[id].courseScores[code]));
 }
 
-/* Liste les cours d'un batch jusqu'à un semestre donné, triés par semestre */
 export function batchCourses(batchId, uptoSem, batches, students, courses) {
   return courses
     .filter(c =>
@@ -162,7 +208,6 @@ export function batchCourses(batchId, uptoSem, batches, students, courses) {
     .sort((a, b) => a.semester - b.semester);
 }
 
-/* Calcule les 11 scores PO pour un batch entier (moyenne pondérée par cours) */
 export function batchPO(batchId, uptoSem, batches, students, courses) {
   return POS.map((_, p) => {
     const pairs = courses
@@ -173,16 +218,10 @@ export function batchPO(batchId, uptoSem, batches, students, courses) {
   });
 }
 
-/* Retourne les IDs des batches dont cet enseignant est responsable */
 export function lecturerBatches(lid, batches) {
   return Object.keys(batches).filter(id => batches[id].owner === lid);
 }
 
-/*
-  Retourne les batches visibles selon le rôle connecté et le filtre actif.
-  Lecturer : uniquement ses propres batches.
-  Admin    : tous les batches, ou filtrés par enseignant si le filtre est actif.
-*/
 export function visibleBatches(role, lectState, batches) {
   if (role === 'lecturer') return lecturerBatches(lectState.lecturer, batches);
   return lectState.filter === 'all'
@@ -190,11 +229,6 @@ export function visibleBatches(role, lectState, batches) {
     : lecturerBatches(lectState.filter, batches);
 }
 
-/*
-  Génère un historique simulé pour les années précédentes.
-  Applique un facteur de dégradation progressif + léger bruit.
-  cum : tableau de scores PO actuels (valeurs de référence).
-*/
 export function makeHistory(cum) {
   const h = {};
   COMPARE_YEARS.forEach((yr, k) => {
