@@ -6,7 +6,7 @@
 import { createContext, useContext, useReducer, useState, useCallback, useRef } from 'react';
 import {
   INITIAL_COURSES, INITIAL_LECTURERS, INITIAL_BATCHES, INITIAL_STUDENTS,
-  generateMatric, generateLogin,
+  PROGRAMS, generateMatric, generateLogin,
 } from '../data/index.js';
 
 
@@ -110,7 +110,7 @@ function reducer(state, action) {
       return { ...state, courses, admin: { ...state.admin, editSemCi: -1 } };
     }
 
-    /* ---- Import scores CSV (depuis la vue enseignant / admin) ---- */
+    /* ---- Import CSV scores ---- */
     case 'IMPORT_FILE': {
       const { filename, batchId, rows } = action;
       let students = { ...state.students };
@@ -144,67 +144,107 @@ function reducer(state, action) {
       return { ...state, students };
     }
 
-    /* ---- Import Excel étudiants (admin) ----
-       Colonnes attendues : nom, prenom, batch, programme
-       Génère un matricule automatique à partir de la session du batch.
-    */
-    case 'IMPORT_STUDENTS_EXCEL': {
-      let students = { ...state.students };
+
+    /* ============================================================
+       GESTION DES UTILISATEURS (interface Excel)
+    ============================================================ */
+
+    /* Ajoute une nouvelle ligne étudiant vide dans le batch par défaut */
+    case 'ADD_USER': {
+      const batchId = Object.keys(state.batches)[0] || '';
+      const id      = 'usr_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 4);
+      const matric  = generateMatric(batchId, state.batches);
+      const newStu  = { id, firstName: '', lastName: '', name: '', matric, batch: batchId, program: PROGRAMS[0] || '', courseScores: {} };
+      const students = { ...state.students, [id]: newStu };
+      const batches  = batchId
+        ? { ...state.batches, [batchId]: { ...state.batches[batchId], students: [...state.batches[batchId].students, id] } }
+        : state.batches;
+      return { ...state, students, batches };
+    }
+
+    /* Met à jour les champs d'un étudiant (inline) */
+    case 'UPDATE_STUDENT': {
+      const { id, patch } = action;
+      const stu = state.students[id];
+      if (!stu) return state;
+
+      /* Recalcule le nom complet si prénom ou nom changent */
+      const firstName = patch.firstName ?? stu.firstName;
+      const lastName  = patch.lastName  ?? stu.lastName;
+      const updated   = { ...stu, ...patch, firstName, lastName, name: `${firstName} ${lastName}`.trim() };
+
+      let students = { ...state.students, [id]: updated };
       let batches  = { ...state.batches };
 
-      action.rows.forEach(({ firstName, lastName, batchId, program }) => {
-        /* Ignore les lignes sans nom ou batch invalide */
-        if (!firstName && !lastName) return;
-        if (!batches[batchId]) return;
-
-        const id     = 'stu_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 5);
-        const matric = generateMatric(batchId, batches);
-        const name   = `${firstName} ${lastName}`.trim();
-
-        students = {
-          ...students,
-          [id]: { id, firstName, lastName, name, matric, batch: batchId, program: program || '', courseScores: {} },
-        };
-        /* Met à jour les étudiants du batch et le compteur pour le prochain matricule */
-        batches = { ...batches, [batchId]: { ...batches[batchId], students: [...batches[batchId].students, id] } };
-      });
+      /* Si le batch change : déplace l'étudiant dans la bonne liste */
+      if (patch.batch && patch.batch !== stu.batch) {
+        if (batches[stu.batch]) {
+          batches = { ...batches, [stu.batch]: { ...batches[stu.batch], students: batches[stu.batch].students.filter(sid => sid !== id) } };
+        }
+        if (batches[patch.batch]) {
+          batches = { ...batches, [patch.batch]: { ...batches[patch.batch], students: [...batches[patch.batch].students, id] } };
+        }
+      }
 
       return { ...state, students, batches };
     }
 
-    /* ---- Import Excel enseignants (admin) ----
-       Colonnes attendues : nom, prenom, cours (séparés par "|"), batch
-       Génère un login automatique et met à jour l'ownership du batch si précisé.
-    */
-    case 'IMPORT_LECTURERS_EXCEL': {
-      let lecturers = { ...state.lecturers };
+    /* Met à jour les champs d'un enseignant (inline) */
+    case 'UPDATE_LECTURER': {
+      const { id, patch } = action;
+      const lec = state.lecturers[id];
+      if (!lec) return state;
+
+      const firstName = patch.firstName ?? lec.firstName;
+      const lastName  = patch.lastName  ?? lec.lastName;
+      const updated   = { ...lec, ...patch, firstName, lastName, name: `${firstName} ${lastName}`.trim() };
+
+      let lecturers = { ...state.lecturers, [id]: updated };
       let batches   = { ...state.batches };
 
-      action.rows.forEach(({ firstName, lastName, courses, batchId }) => {
-        if (!firstName && !lastName) return;
-
-        const id    = 'lec_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 5);
-        const login = generateLogin(firstName, lastName);
-        const name  = `${firstName} ${lastName}`.trim();
-
-        lecturers = {
-          ...lecturers,
-          [id]: { id, firstName, lastName, name, login, courses: courses || [], batch: batchId || '' },
-        };
-
-        /* Assigne ce lecturer comme responsable du batch s'il est spécifié */
-        if (batchId && batches[batchId]) {
-          batches = { ...batches, [batchId]: { ...batches[batchId], owner: id } };
+      /* Si le batch référent change : met à jour l'ownership */
+      if (patch.batch && patch.batch !== lec.batch) {
+        if (lec.batch && batches[lec.batch]?.owner === id) {
+          const fallback = Object.keys(lecturers).find(lid => lid !== id) || '';
+          batches = { ...batches, [lec.batch]: { ...batches[lec.batch], owner: fallback } };
         }
-      });
+        if (batches[patch.batch]) {
+          batches = { ...batches, [patch.batch]: { ...batches[patch.batch], owner: id } };
+        }
+      }
 
       return { ...state, lecturers, batches };
     }
 
-    /* ---- Changement de rôle d'un utilisateur (admin) ----
-       student → lecturer : retire de students, ajoute dans lecturers
-       lecturer → student : retire de lecturers, ajoute dans students
-    */
+    /* Supprime un utilisateur (étudiant ou enseignant) */
+    case 'DELETE_USER': {
+      const { userId, role } = action;
+      let students  = { ...state.students };
+      let lecturers = { ...state.lecturers };
+      let batches   = { ...state.batches };
+
+      if (role === 'student') {
+        const stu = students[userId];
+        if (!stu) return state;
+        students = Object.fromEntries(Object.entries(students).filter(([k]) => k !== userId));
+        if (batches[stu.batch]) {
+          batches = { ...batches, [stu.batch]: { ...batches[stu.batch], students: batches[stu.batch].students.filter(id => id !== userId) } };
+        }
+      } else {
+        const lec = lecturers[userId];
+        if (!lec) return state;
+        lecturers = Object.fromEntries(Object.entries(lecturers).filter(([k]) => k !== userId));
+        /* Réassigne l'ownership des batches orphelins au premier enseignant restant */
+        const firstLec = Object.keys(lecturers)[0] || '';
+        Object.entries(batches).forEach(([bid, b]) => {
+          if (b.owner === userId) batches = { ...batches, [bid]: { ...batches[bid], owner: firstLec } };
+        });
+      }
+
+      return { ...state, students, lecturers, batches };
+    }
+
+    /* Changement de rôle depuis la liste déroulante */
     case 'SET_USER_ROLE': {
       const { userId, currentRole, newRole } = action;
       if (currentRole === newRole) return state;
@@ -216,38 +256,63 @@ function reducer(state, action) {
       if (currentRole === 'student' && newRole === 'lecturer') {
         const stu = students[userId];
         if (!stu) return state;
-
-        /* Retrait de la liste étudiants */
         students = Object.fromEntries(Object.entries(students).filter(([k]) => k !== userId));
-        /* Retrait de la liste du batch */
         if (batches[stu.batch]) {
           batches = { ...batches, [stu.batch]: { ...batches[stu.batch], students: batches[stu.batch].students.filter(id => id !== userId) } };
         }
-        /* Création du compte enseignant */
         const login = generateLogin(stu.firstName || stu.name, stu.lastName || '');
         lecturers = { ...lecturers, [userId]: { id: userId, firstName: stu.firstName || '', lastName: stu.lastName || '', name: stu.name, login, courses: [], batch: stu.batch } };
 
       } else if (currentRole === 'lecturer' && newRole === 'student') {
         const lec = lecturers[userId];
         if (!lec) return state;
-
-        /* Retrait de la liste enseignants */
         lecturers = Object.fromEntries(Object.entries(lecturers).filter(([k]) => k !== userId));
-        /* Si cet enseignant était propriétaire d'un batch, on réassigne au premier enseignant restant */
         const firstLec = Object.keys(lecturers)[0] || '';
         Object.entries(batches).forEach(([bid, b]) => {
           if (b.owner === userId) batches = { ...batches, [bid]: { ...batches[bid], owner: firstLec } };
         });
-        /* Création du compte étudiant */
         const batchId = lec.batch || Object.keys(batches)[0];
         const matric  = generateMatric(batchId, batches);
-        students = { ...students, [userId]: { id: userId, firstName: lec.firstName || '', lastName: lec.lastName || '', name: lec.name, matric, batch: batchId, program: '', courseScores: {} } };
+        students = { ...students, [userId]: { id: userId, firstName: lec.firstName || '', lastName: lec.lastName || '', name: lec.name, matric, batch: batchId, program: PROGRAMS[0] || '', courseScores: {} } };
         if (batches[batchId]) {
           batches = { ...batches, [batchId]: { ...batches[batchId], students: [...batches[batchId].students, userId] } };
         }
       }
 
       return { ...state, students, lecturers, batches };
+    }
+
+    /* Import Excel étudiants */
+    case 'IMPORT_STUDENTS_EXCEL': {
+      let students = { ...state.students };
+      let batches  = { ...state.batches };
+      action.rows.forEach(({ firstName, lastName, batchId, program }) => {
+        if (!firstName && !lastName) return;
+        if (!batches[batchId]) return;
+        const id     = 'stu_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 5);
+        const matric = generateMatric(batchId, batches);
+        const name   = `${firstName} ${lastName}`.trim();
+        students = { ...students, [id]: { id, firstName, lastName, name, matric, batch: batchId, program: program || '', courseScores: {} } };
+        batches  = { ...batches, [batchId]: { ...batches[batchId], students: [...batches[batchId].students, id] } };
+      });
+      return { ...state, students, batches };
+    }
+
+    /* Import Excel enseignants */
+    case 'IMPORT_LECTURERS_EXCEL': {
+      let lecturers = { ...state.lecturers };
+      let batches   = { ...state.batches };
+      action.rows.forEach(({ firstName, lastName, courses, batchId }) => {
+        if (!firstName && !lastName) return;
+        const id    = 'lec_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 5);
+        const login = generateLogin(firstName, lastName);
+        const name  = `${firstName} ${lastName}`.trim();
+        lecturers = { ...lecturers, [id]: { id, firstName, lastName, name, login, courses: courses || [], batch: batchId || '' } };
+        if (batchId && batches[batchId]) {
+          batches = { ...batches, [batchId]: { ...batches[batchId], owner: id } };
+        }
+      });
+      return { ...state, lecturers, batches };
     }
 
     default:
