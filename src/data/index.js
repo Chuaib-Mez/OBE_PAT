@@ -78,59 +78,113 @@ export const INITIAL_COURSES = [
 
 
 /* ============================================================
-   DONNÉES DE TEST
-   Un seul étudiant, un seul enseignant — suffisant pour valider
-   toutes les fonctionnalités sans données fictives.
+   DONNÉES DE DÉMONSTRATION
+   6 étudiants dans B7 (3 Engineering + 3 Programming),
+   2 étudiants dans B6 (1 Engineering + 1 Programming),
+   2 enseignants (L1 → B7, L2 → B6).
    ============================================================ */
 
-/*
-  Modèle étudiant :
-    id, firstName, lastName, name, matric, batch, program, courseScores
-*/
 export const INITIAL_STUDENTS = {
+  /* ---- Batch 7 · Engineering ---- */
   test_s1: {
-    id:                 "test_s1",
-    firstName:          "Ahmad",
-    lastName:           "Ali",
-    name:               "Ahmad Ali",
-    matric:             "A251001",
-    batch:              "B7",
-    program:            "Engineering",
-    courseScores:       {},
-    password:           "Test1234",
-    mustChangePassword: false,
+    id: "test_s1", firstName: "Ahmad",  lastName: "Ali",
+    name: "Ahmad Ali",   matric: "A251001", batch: "B7", program: "Engineering",
+    courseScores: { CS101: 75, CS110: 68, CS120: 72, CS201: 80, CS210: 65 },
+    password: "Test1234", mustChangePassword: false,
+  },
+  s_aisha: {
+    id: "s_aisha", firstName: "Aisha",  lastName: "Rahman",
+    name: "Aisha Rahman", matric: "A251002", batch: "B7", program: "Engineering",
+    courseScores: { CS101: 85, CS110: 78, CS120: 82, CS201: 88, CS210: 79 },
+    password: "Test1234", mustChangePassword: false,
+  },
+  s_raj: {
+    id: "s_raj", firstName: "Raj", lastName: "Kumar",
+    name: "Raj Kumar", matric: "A251003", batch: "B7", program: "Engineering",
+    courseScores: { CS101: 58, CS110: 45, CS120: 52, CS201: 61, CS210: 48 },
+    password: "Test1234", mustChangePassword: false,
+  },
+
+  /* ---- Batch 7 · Programming ---- */
+  s_mei: {
+    id: "s_mei", firstName: "Mei", lastName: "Lin",
+    name: "Mei Lin", matric: "A251004", batch: "B7", program: "Programming",
+    courseScores: { CS101: 92, CS110: 55, CS120: 63, CS201: 95, CS210: 88 },
+    password: "Test1234", mustChangePassword: false,
+  },
+  s_farid: {
+    id: "s_farid", firstName: "Farid", lastName: "Hassan",
+    name: "Farid Hassan", matric: "A251005", batch: "B7", program: "Programming",
+    courseScores: { CS101: 70, CS110: 48, CS120: 58, CS201: 74, CS210: 67 },
+    password: "Test1234", mustChangePassword: false,
+  },
+  s_priya: {
+    id: "s_priya", firstName: "Priya", lastName: "Nair",
+    name: "Priya Nair", matric: "A251006", batch: "B7", program: "Programming",
+    courseScores: { CS101: 82, CS110: 62, CS120: 70, CS201: 86, CS210: 75 },
+    password: "Test1234", mustChangePassword: false,
+  },
+
+  /* ---- Batch 6 · Engineering ---- */
+  s_lim: {
+    id: "s_lim", firstName: "Sook", lastName: "Lim",
+    name: "Sook Lim", matric: "A242001", batch: "B6", program: "Engineering",
+    courseScores: { CS101: 80, CS110: 72, CS120: 75, CS201: 82, CS210: 78, CS220: 70, CS305: 65, CS310: 68, CS320: 74, CS400: 80 },
+    password: "Test1234", mustChangePassword: false,
+  },
+
+  /* ---- Batch 6 · Programming ---- */
+  s_zara: {
+    id: "s_zara", firstName: "Zara", lastName: "Ibrahim",
+    name: "Zara Ibrahim", matric: "A242002", batch: "B6", program: "Programming",
+    courseScores: { CS101: 88, CS110: 60, CS120: 65, CS201: 92, CS210: 85, CS220: 72, CS305: 70, CS310: 75, CS320: 80, CS400: 75 },
+    password: "Test1234", mustChangePassword: false,
   },
 };
 
-/*
-  Modèle enseignant :
-    id, firstName, lastName, name, login, courses (codes des cours enseignés), batch (batch référent)
-*/
 export const INITIAL_LECTURERS = {
   L1: {
-    id:                 "L1",
-    firstName:          "Lee",
-    lastName:           "Wei",
-    name:               "Dr. Lee Wei",
-    email:              "lee.wei@univ.edu",
-    courses:            [],
-    batch:              "B7",
-    password:           "Test1234",
-    mustChangePassword: false,
+    id: "L1", firstName: "Lee", lastName: "Wei", name: "Dr. Lee Wei",
+    email: "lee.wei@univ.edu", courses: [], batch: "B7",
+    password: "Test1234", mustChangePassword: false,
+  },
+  L2: {
+    id: "L2", firstName: "Sarah", lastName: "Chen", name: "Dr. Sarah Chen",
+    email: "sarah.chen@univ.edu", courses: [], batch: "B6",
+    password: "Test1234", mustChangePassword: false,
   },
 };
 
 
 /* ============================================================
    PROMOTIONS (BATCHES)
-   Tous les batches sont initialement rattachés au seul enseignant test (L1).
    ============================================================ */
 export const CUR_YEAR = 2026;
 export const COMPARE_YEARS = [2025, 2024, 2023, 2022];
 
 export const INITIAL_BATCHES = {
-  B7: { num: 7, name: "Batch 7", year: CUR_YEAR, session: "A251", progress: 3, owner: "L1", comment: "", students: ["test_s1"], courseComments: {} },
-  B6: { num: 6, name: "Batch 6", year: CUR_YEAR, session: "A242", progress: 8, owner: "L1", comment: "", students: [], courseComments: {} },
+  B7: {
+    num: 7, name: "Batch 7", year: CUR_YEAR, session: "A251", progress: 3, owner: "L1",
+    students: ["test_s1", "s_aisha", "s_raj", "s_mei", "s_farid", "s_priya"],
+    comment: "Batch engagé, bon dynamisme. Engineering au-dessus du seuil sur tous les POs sem. 1-2. Surveiller CS110 pour les Programming students.",
+    courseComments: {
+      CS101: "Très bons résultats globalement. TD pratiques efficaces, bonne adhésion.",
+      CS110: "Module difficile pour les non-Engineering. Renforcement mathématique recommandé avant sem. 2.",
+      CS120: "Bonne participation. Notions de graphes et logique propositionnelle bien assimilées.",
+      CS201: "Excellents résultats, notamment chez les Programming students. PO4 bien couvert.",
+      CS210: "Attention à Raj Kumar et Farid Hassan — scores sous le seuil. Révisions ciblées prévues.",
+    },
+  },
+  B6: {
+    num: 6, name: "Batch 6", year: CUR_YEAR, session: "A242", progress: 8, owner: "L2",
+    students: ["s_lim", "s_zara"],
+    comment: "Promotion solide avec des résultats cohérents sur l'ensemble du cursus. Forte progression du PO2 au fil des semestres.",
+    courseComments: {
+      CS101: "Résultats solides dès le premier cours. Bonne base pour la suite.",
+      CS220: "Architecture bien maîtrisée — forte contribution au PO5.",
+      CS305: "Résultats légèrement en dessous pour Engineering. Point à surveiller.",
+    },
+  },
   B5: { num: 5, name: "Batch 5", year: CUR_YEAR, session: "A232", progress: 8, owner: "L1", comment: "", students: [], courseComments: {} },
   B4: { num: 4, name: "Batch 4", year: CUR_YEAR, session: "A222", progress: 8, owner: "L1", comment: "", students: [], courseComments: {} },
 };

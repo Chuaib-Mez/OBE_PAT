@@ -423,17 +423,21 @@ export default function LecturerBatchesView() {
                             )}
                           </td>
 
-                          {/* Commentaire — sauvegardé au blur */}
-                          <td style={{ padding: '4px 8px' }}>
-                            <input
+                          {/* Commentaire — textarea extensible, sauvegardé au blur */}
+                          <td style={{ padding: '4px 8px', verticalAlign: 'top' }}>
+                            <textarea
                               key={`cc-${batchId}-${row.course.code}`}
                               defaultValue={b.courseComments?.[row.course.code] ?? ''}
                               onBlur={e => dispatch({ type: 'SAVE_COURSE_COMMENT', batchId, code: row.course.code, comment: e.target.value })}
                               placeholder="Commentaire…"
+                              rows={2}
                               style={{
                                 width: '100%', border: 'none', outline: 'none',
                                 borderBottom: '1px solid var(--line)',
-                                background: 'transparent', padding: '4px 2px', fontSize: 12,
+                                background: 'transparent', padding: '4px 2px',
+                                fontSize: 12, lineHeight: 1.45,
+                                fontFamily: 'var(--sans)',
+                                resize: 'vertical', minHeight: 34,
                               }}
                             />
                           </td>
