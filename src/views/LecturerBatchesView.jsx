@@ -1,84 +1,157 @@
 /* ============================================================
    views/LecturerBatchesView.jsx — Espace enseignant (vue principale)
-   Remplace la fonction viewLectBatches() de lecturer.js (version vanilla).
 
-   Contient :
-     - Une sidebar avec les boutons de sélection de batch, le filtre
-       enseignant (admin uniquement) et les boutons import/export CSV
-     - Un graphique en barres de l'atteinte PO du batch sélectionné
-     - Un tableau des cours avec leur taux d'atteinte
-     - Une zone de commentaire libre sur le batch
-     - Une liste des étudiants du batch (cliquables vers la vue détail)
-     - Un graphique global tous batches confondus
+   Structure :
+     Sidebar  : import/export, filtre enseignant (admin), liste des batches
+     Contenu  :
+       - En-tête batch + navigation semestre
+       - Deux onglets Programme (filtrent les données par programme étudiant)
+       - Graphique PO/Cours avec comparaison 4 ans
+       - Tableau PO-first : PO → cours contributeurs → attainment + commentaire
+       - Liste des étudiants (filtrée par programme)
+       - Commentaire batch
    ============================================================ */
 
 import { useRef } from 'react';
 import AppBar from '../components/AppBar.jsx';
 import BarsSVG from '../components/BarsSVG.jsx';
-import PoChips from '../components/PoChips.jsx';
 import { useApp } from '../context/AppContext.jsx';
 import {
-  POS, PASS, COMPARE_YEARS,
-  semOrder, batchPO, batchCourses, courseAttainment, studentPO, avgOf, visibleBatches,
+  POS, PO_LABELS, PASS, PROGRAMS, COMPARE_YEARS,
+  semOrder, batchPO, courseAttainment, studentPO, avgOf, visibleBatches, makeHistory, wmean, mean,
 } from '../data/index.js';
+
+/* Couleurs pour les 4 années de comparaison (du plus récent au plus ancien) */
+const YEAR_COLORS = ['#60a5fa', '#a78bfa', '#fb923c', '#94a3b8'];
+
+/* ============================================================
+   CALCULS FILTRÉS PAR PROGRAMME
+   ============================================================ */
+
+/* Attainment d'un cours pour les seuls étudiants d'un programme */
+function courseAttForProg(code, studentIds, students) {
+  const ids = studentIds.filter(id => code in (students[id]?.courseScores ?? {}));
+  if (!ids.length) return null;
+  return mean(ids.map(id => students[id].courseScores[code]));
+}
+
+/* Attainment de chaque PO pour les seuls étudiants d'un programme */
+function batchPOForProg(studentIds, uptoSem, students, courses) {
+  return POS.map((_, p) => {
+    const pairs = courses
+      .filter(c => c.w[p] > 0 && (uptoSem === 'all' || c.semester <= uptoSem))
+      .map(c => {
+        const att = courseAttForProg(c.code, studentIds, students);
+        return att != null ? [att, c.w[p]] : null;
+      })
+      .filter(Boolean);
+    return wmean(pairs);
+  });
+}
+
+
+/* ============================================================
+   VUE PRINCIPALE
+   ============================================================ */
 
 export default function LecturerBatchesView() {
   const { state, dispatch, toast, go } = useApp();
   const { lect, role, batches, students, courses, lecturers } = state;
-
-  /* Référence à l'input fichier caché (déclenché par le bouton Import) */
   const fileRef = useRef(null);
 
-  /* Détermine le batch actif (fallback sur le premier disponible si nécessaire) */
+  /* ---- Batch actif ---- */
   const vis     = visibleBatches(role, lect, batches);
   const batchId = vis.includes(lect.batch) ? lect.batch : (vis[0] || Object.keys(batches)[0]);
   const b       = batches[batchId];
   const order   = semOrder(b.progress);
   const sem     = order.includes(lect.sem) ? lect.sem : order[0];
 
-  /* Scores PO du batch et construction des séries pour le graphique */
-  const cur    = batchPO(batchId, sem, batches, students, courses);
-  const overall = avgOf(cur);
-  const series = [{ values: cur, color: 'var(--teal)', stroke: 'var(--teal)' }];
+  /* ---- Onglets programme ---- */
+  const activeProgTab = lect.activeProgTab ?? 0;
+  const prog1         = lect.prog1 ?? PROGRAMS[0];
+  const prog2         = lect.prog2 ?? (PROGRAMS[1] || PROGRAMS[0]);
+  const activeProgram = activeProgTab === 0 ? prog1 : prog2;
 
-  /* Ajout d'une série grisée si la comparaison par année est activée */
-  if (lect.compare && b.history) {
-    series.push({
-      values: b.history[lect.compareYear] || POS.map(() => 0),
-      color: 'var(--ink-3)', stroke: 'var(--ink-3)', muted: true,
+  /* Étudiants du batch appartenant au programme actif */
+  const progStudentIds = b.students.filter(id => students[id]?.program === activeProgram);
+
+  /* ---- Cours du semestre courant (tous, qu'il y ait des scores ou non) ---- */
+  const semCourses = courses
+    .filter(c => sem === 'all' || c.semester <= sem)
+    .slice()
+    .sort((a, b2) => a.semester - b2.semester);
+
+  /* ---- Scores PO pour le programme actif ---- */
+  const curPO  = batchPOForProg(progStudentIds, sem, students, courses);
+  const overall = avgOf(curPO);
+
+  /* ---- Historique simulé (4 ans) ---- */
+  const history = makeHistory(curPO);
+
+  /* ---- Mode du graphique : 'po' ou 'course' ---- */
+  const chartMode = lect.chartMode ?? 'po';
+
+  /* Séries pour le graphique PO */
+  const poSeries = [
+    { values: curPO, color: 'var(--teal)', stroke: 'var(--teal)', label: String(b.year) },
+    ...COMPARE_YEARS.map((yr, k) => ({
+      values: history[yr] || POS.map(() => 0),
+      color: YEAR_COLORS[k], stroke: YEAR_COLORS[k], muted: true, label: String(yr),
+    })),
+  ];
+
+  /* Séries pour le graphique par cours */
+  const coursesWithData = semCourses.filter(c => courseAttForProg(c.code, progStudentIds, students) != null);
+  const courseAtts      = coursesWithData.map(c => courseAttForProg(c.code, progStudentIds, students) ?? 0);
+  const courseHistory   = makeHistory(courseAtts);
+  const courseSeries    = [
+    { values: courseAtts, color: 'var(--teal)', stroke: 'var(--teal)', label: String(b.year) },
+    ...COMPARE_YEARS.map((yr, k) => ({
+      values: courseHistory[yr] || [],
+      color: YEAR_COLORS[k], stroke: YEAR_COLORS[k], muted: true, label: String(yr),
+    })),
+  ];
+  const courseLabels = coursesWithData.map(c => c.code);
+
+  /* Séries actives selon le mode graphique */
+  const activeSeries = chartMode === 'po' ? poSeries : courseSeries;
+  const activeLabels = chartMode === 'course' ? courseLabels : undefined;
+
+  /* ---- Légende des années ---- */
+  const yearLegend = [
+    { color: 'var(--teal)', label: String(b.year) + ' (actuel)' },
+    ...COMPARE_YEARS.map((yr, k) => ({ color: YEAR_COLORS[k], label: String(yr) })),
+  ];
+
+  /* ---- Rows pour le tableau PO-first ---- */
+  const tableRows = [];
+  POS.forEach((po, pi) => {
+    const contributing = semCourses.filter(c => c.w[pi] > 0);
+    if (!contributing.length) return;
+    contributing.forEach((c, ci) => {
+      tableRows.push({ po, pi, course: c, isFirst: ci === 0, span: contributing.length });
     });
-  }
+  });
 
-  /* Navigation entre semestres (cyclique) */
+  /* ---- Navigation semestre ---- */
   const setSem = (d) => {
     let i = order.indexOf(sem);
     i = (i + d + order.length) % order.length;
     dispatch({ type: 'SET_LECT', patch: { sem: order[i] } });
   };
 
-  /* Sélection d'un batch dans la sidebar */
   const pickBatch = (id) =>
-    dispatch({ type: 'SET_LECT', patch: { batch: id, compare: false, compareYear: 2025, sem: 1 } });
+    dispatch({ type: 'SET_LECT', patch: { batch: id, sem: 1 } });
 
-  /* Navigation entre les années de comparaison (bornée) */
-  const cmpYear = (d) => {
-    const y = Math.max(
-      COMPARE_YEARS[COMPARE_YEARS.length - 1],
-      Math.min(COMPARE_YEARS[0], lect.compareYear + d)
-    );
-    dispatch({ type: 'SET_LECT', patch: { compareYear: y } });
-  };
-
-  /* Sauvegarde du commentaire batch (lit la valeur du textarea par son id) */
   const saveComment = () => {
     const el = document.getElementById('bcomment');
     dispatch({ type: 'SAVE_COMMENT', batchId, comment: el.value });
-    toast('Comment saved');
+    toast('Commentaire sauvegardé');
   };
 
   /* ---- Export CSV ---- */
   const doExport = () => {
-    let rows = [['Matric', 'Name', 'Course', 'Attainment']];
+    const rows = [['Matric', 'Name', 'Course', 'Attainment']];
     b.students.forEach(id => {
       const s = students[id];
       Object.keys(s.courseScores).forEach(code =>
@@ -88,15 +161,14 @@ export default function LecturerBatchesView() {
     const csv = rows
       .map(r => r.map(c => /[",\n]/.test(String(c)) ? `"${String(c).replace(/"/g, '""')}"` : c).join(','))
       .join('\n');
-    const a  = document.createElement('a');
+    const a = document.createElement('a');
     a.href   = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
-    a.download = b.name.replace(/\s/g, '_') + '_course_attainment.csv';
+    a.download = b.name.replace(/\s/g, '_') + '_scores.csv';
     a.click();
-    toast(`Export generated (${b.name})`);
+    toast(`Export généré (${b.name})`);
   };
 
   /* ---- Import CSV ---- */
-  /* Lit et parse le fichier sélectionné, puis dispatch IMPORT_FILE */
   const onImport = (e) => {
     const f = e.target.files[0];
     if (!f) return;
@@ -105,10 +177,9 @@ export default function LecturerBatchesView() {
       try {
         const lines = reader.result.split(/\r?\n/).filter(l => l.trim());
         const head  = lines.shift().split(',').map(h => h.trim().toLowerCase());
-        /* Détection des colonnes par leur en-tête */
         const iM = head.indexOf('matric'), iN = head.indexOf('name'),
               iC = head.indexOf('course'), iA = head.indexOf('attainment');
-        if (iM < 0 || iC < 0 || iA < 0) { toast('Expected: Matric,Name,Course,Attainment'); return; }
+        if (iM < 0 || iC < 0 || iA < 0) { toast('Colonnes requises : Matric, Name, Course, Attainment'); return; }
         const rows = [];
         lines.forEach(l => {
           const c      = l.split(',');
@@ -119,22 +190,15 @@ export default function LecturerBatchesView() {
           rows.push({ matric, name: iN >= 0 ? (c[iN] || matric).trim() : matric, course, att });
         });
         dispatch({ type: 'IMPORT_FILE', filename: f.name, batchId, rows });
-        toast(`${rows.length} rows imported into ${b.name}`);
-      } catch { toast('Could not read file'); }
+        toast(`${rows.length} lignes importées dans ${b.name}`);
+      } catch { toast('Impossible de lire le fichier'); }
     };
     reader.readAsText(f);
-    e.target.value = ''; /* Réinitialise pour permettre de re-sélectionner le même fichier */
+    e.target.value = '';
   };
 
-  /* Cours et PO global pré-calculés pour les tableaux */
-  const coursesInBatch = batchCourses(batchId, sem, batches, students, courses);
-  const allBatchesPO   = POS.map((_, p) =>
-    avgOf(
-      Object.keys(batches)
-        .map(id => batchPO(id, 'all', batches, students, courses)[p])
-        .filter(v => v > 0)
-    )
-  );
+  /* ---- Style cellule header ---- */
+  const th = { padding: '8px 10px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: 'var(--ink-3)', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap' };
 
   return (
     <div className="view">
@@ -144,31 +208,31 @@ export default function LecturerBatchesView() {
         <div className="page-head">
           <div>
             <h1>Lecturer space</h1>
-            <div className="meta">PO attainment computed from course attainment · comparison · comment</div>
+            <div className="meta">Analyse PO par programme · comparaison 4 ans</div>
           </div>
         </div>
 
         <div className="ld">
 
-          {/* ---- Sidebar ---- */}
+          {/* ================================================================
+              SIDEBAR
+          ================================================================ */}
           <aside className="side">
-            {/* Boutons Import / Export CSV */}
             <div className="io">
-              <button className="btn primary sm" onClick={() => fileRef.current?.click()}>⬆ Import Excel</button>
-              <button className="btn sm" onClick={doExport}>⬇ Export Excel</button>
+              <button className="btn primary sm" onClick={() => fileRef.current?.click()}>⬆ Import CSV</button>
+              <button className="btn sm" onClick={doExport}>⬇ Export CSV</button>
               <input ref={fileRef} type="file" accept=".csv" hidden onChange={onImport} />
             </div>
 
-            {/* Filtre par enseignant (admin uniquement) */}
             {role === 'admin' && (
               <>
-                <div className="label">Lecturer</div>
+                <div className="label">Enseignant</div>
                 <select
                   value={lect.filter}
                   onChange={e => dispatch({ type: 'SET_LECT', patch: { filter: e.target.value } })}
                   style={{ width: '100%', height: 34, border: '1px solid var(--line-2)', borderRadius: 8, padding: '0 8px', background: 'var(--surface)', marginBottom: 10, fontSize: 13 }}
                 >
-                  <option value="all">All lecturers</option>
+                  <option value="all">Tous les enseignants</option>
                   {Object.entries(lecturers).map(([id, l]) => (
                     <option key={id} value={id}>{l.name}</option>
                   ))}
@@ -176,164 +240,268 @@ export default function LecturerBatchesView() {
               </>
             )}
 
-            {/* Liste des batches accessibles */}
             <div className="label">Batches</div>
             <div className="blist">
               {vis.length ? vis.map(id => {
                 const bt    = batches[id];
-                /* En mode admin "tous les enseignants" : affiche le nom du responsable */
                 const small = (role === 'admin' && lect.filter === 'all')
                   ? (lecturers[bt.owner]?.name ?? bt.session)
                   : bt.session;
                 return (
-                  <button
-                    key={id}
-                    className={`bitem ${id === batchId ? 'on' : ''}`}
-                    onClick={() => pickBatch(id)}
-                  >
+                  <button key={id} className={`bitem ${id === batchId ? 'on' : ''}`} onClick={() => pickBatch(id)}>
                     <span>{bt.name}</span><small>{small}</small>
                   </button>
                 );
-              }) : <div className="empty">No batch.</div>}
+              }) : <div className="empty">Aucun batch.</div>}
             </div>
           </aside>
 
-          {/* ---- Contenu principal ---- */}
+          {/* ================================================================
+              CONTENU PRINCIPAL
+          ================================================================ */}
           <main>
 
-            {/* En-tête du batch avec navigation semestre et toggle comparaison */}
+            {/* En-tête batch + navigation semestre */}
             <div className="page-head" style={{ marginBottom: 14 }}>
               <div>
                 <h1 style={{ fontSize: 18 }}>{b.name} · {b.year}</h1>
                 <div className="meta mono">
-                  {b.session} · {lecturers[b.owner]?.name ?? '—'} · average attainment {overall}%
+                  {b.session} · {lecturers[b.owner]?.name ?? '—'} · moyenne {overall}%
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-                {/* Toggle "comparer par année" */}
-                <label className="tog" style={{ fontSize: 13 }}>
-                  <input
-                    type="checkbox"
-                    checked={lect.compare}
-                    onChange={() => dispatch({ type: 'SET_LECT', patch: { compare: !lect.compare } })}
-                  />
-                  Compare by year
-                </label>
-                {/* Sélecteur d'année (visible si comparaison activée) */}
-                {lect.compare && (
-                  <div className="stepper" role="group" aria-label="Comparison year">
-                    <button
-                      onClick={() => cmpYear(-1)}
-                      disabled={lect.compareYear <= COMPARE_YEARS[COMPARE_YEARS.length - 1]}
-                    >‹</button>
-                    <span className="val mono">{b.name} · {lect.compareYear}</span>
-                    <button
-                      onClick={() => cmpYear(1)}
-                      disabled={lect.compareYear >= COMPARE_YEARS[0]}
-                    >›</button>
+              <div className="stepper">
+                <button onClick={() => setSem(-1)}>‹</button>
+                <span className="val mono">{sem === 'all' ? 'Cumulatif' : `Jusqu\'au sem. ${sem}`}</span>
+                <button onClick={() => setSem(1)}>›</button>
+              </div>
+            </div>
+
+            {/* ---- Onglets Programme ---- */}
+            <div style={{ display: 'flex', borderBottom: '2px solid var(--line)', marginBottom: 16, gap: 0 }}>
+              {[0, 1].map(tabIdx => {
+                const prog    = tabIdx === 0 ? prog1 : prog2;
+                const isActive = activeProgTab === tabIdx;
+                return (
+                  <div
+                    key={tabIdx}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 6,
+                      padding: '8px 16px', cursor: 'pointer',
+                      borderBottom: isActive ? '2px solid var(--teal)' : '2px solid transparent',
+                      marginBottom: -2,
+                      background: isActive ? 'var(--surface)' : 'transparent',
+                    }}
+                    onClick={() => dispatch({ type: 'SET_LECT', patch: { activeProgTab: tabIdx } })}
+                  >
+                    <span style={{ fontWeight: isActive ? 600 : 400, fontSize: 13, color: isActive ? 'var(--teal)' : 'var(--ink-2)' }}>
+                      {prog}
+                    </span>
+                    <select
+                      value={prog}
+                      onClick={e => e.stopPropagation()}
+                      onChange={e => {
+                        const patch = tabIdx === 0 ? { prog1: e.target.value } : { prog2: e.target.value };
+                        dispatch({ type: 'SET_LECT', patch });
+                      }}
+                      style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 11, color: 'var(--ink-3)', outline: 'none' }}
+                    >
+                      {PROGRAMS.map(p => <option key={p} value={p}>{p}</option>)}
+                    </select>
                   </div>
-                )}
-                {/* Navigation entre semestres */}
-                <div className="stepper">
-                  <button onClick={() => setSem(-1)}>‹</button>
-                  <span className="val mono">{sem === 'all' ? 'Cumulative' : `Up to sem ${sem}`}</span>
-                  <button onClick={() => setSem(1)}>›</button>
+                );
+              })}
+              <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', paddingRight: 4 }}>
+                <span className="meta" style={{ fontSize: 12 }}>
+                  {progStudentIds.length} étudiant{progStudentIds.length !== 1 ? 's' : ''} · {activeProgram}
+                </span>
+              </div>
+            </div>
+
+            {/* ================================================================
+                GRAPHIQUE : PO ou Cours + comparaison 4 ans
+            ================================================================ */}
+            <div className="card">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
+                <div>
+                  <h2>{chartMode === 'po' ? 'PO Attainment cumulatif' : 'Attainment par cours'} — {activeProgram}</h2>
+                  <div className="sub">Comparaison avec les 4 dernières promotions · ligne rouge = seuil</div>
+                </div>
+                {/* Toggle By PO / By Course */}
+                <div className="seg">
+                  <button
+                    className={chartMode === 'po' ? 'on' : ''}
+                    onClick={() => dispatch({ type: 'SET_LECT', patch: { chartMode: 'po' } })}
+                  >Par PO</button>
+                  <button
+                    className={chartMode === 'course' ? 'on' : ''}
+                    onClick={() => dispatch({ type: 'SET_LECT', patch: { chartMode: 'course' } })}
+                  >Par cours</button>
                 </div>
               </div>
-            </div>
 
-            {/* Graphique en barres : atteinte PO du batch */}
-            <div className="card">
-              <h2>Cumulative PO attainment (%)</h2>
-              <div className="sub">One bar per PO · red line = passing threshold</div>
-              <BarsSVG series={series} />
-              <div className="legend">
-                <span><span className="swatch" style={{ background: 'var(--teal)' }} />{b.name} · {b.year}</span>
-                {lect.compare && (
-                  <span><span className="swatch" style={{ background: 'var(--line-2)' }} />{b.name} · {lect.compareYear}</span>
-                )}
-                <span><span className="swatch" style={{ background: 'var(--red)' }} />PO below threshold</span>
+              {(chartMode === 'po' || coursesWithData.length > 0) ? (
+                <BarsSVG
+                  series={activeSeries}
+                  labels={activeLabels}
+                  rotateLabels={chartMode === 'course'}
+                  height={chartMode === 'course' ? 300 : 268}
+                />
+              ) : (
+                <div className="empty" style={{ padding: '32px 0' }}>
+                  Aucun score disponible pour les cours de {activeProgram}.
+                </div>
+              )}
+
+              {/* Légende */}
+              <div className="legend" style={{ marginTop: 8, flexWrap: 'wrap', gap: '6px 16px' }}>
+                {yearLegend.map(({ color, label }) => (
+                  <span key={label}>
+                    <span className="swatch" style={{ background: color }} />
+                    {label}
+                  </span>
+                ))}
+                <span><span className="swatch" style={{ background: 'var(--red)' }} />PO en dessous du seuil</span>
               </div>
             </div>
 
-            {/* Tableau des cours avec leur contribution aux POs */}
+
+            {/* ================================================================
+                TABLEAU PO-FIRST
+                PO | Cours contributeurs | Attainment cours | Commentaire | Attainment PO | Statut
+            ================================================================ */}
             <div className="card" style={{ marginTop: 16 }}>
-              <h2>Course attainment</h2>
-              <div className="sub">PO attainment above = average of the courses contributing to each PO</div>
-              <table>
-                <thead>
-                  <tr>
-                    <th>Sem</th><th>Code</th><th>Course</th>
-                    <th>Contributes to</th>
-                    <th style={{ textAlign: 'right' }}>Attainment</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {coursesInBatch.length ? coursesInBatch.map(c => {
-                    const att = courseAttainment(batchId, c.code, batches, students);
-                    const ok  = att >= PASS;
-                    return (
-                      <tr key={c.code}>
-                        <td className="mono">S{c.semester}</td>
-                        <td className="mono">{c.code}</td>
-                        <td>{c.name}</td>
-                        <td><PoChips w={c.w} /></td>
-                        <td className="num">{att == null ? '—' : att + '%'}</td>
-                        <td>
-                          {att == null ? '' : ok
-                            ? <span className="tag ok">met</span>
-                            : <span className="tag no">below</span>}
+              <h2>Analyse par PO — {activeProgram}</h2>
+              <div className="sub">Chaque PO regroupe les cours qui y contribuent · commentaire modifiable par cours</div>
+
+              <div className="gridtbl" style={{ marginTop: 12 }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '2px solid var(--line)' }}>
+                      <th style={{ ...th, minWidth: 110 }}>PO</th>
+                      <th style={{ ...th, minWidth: 180 }}>Cours contributeur</th>
+                      <th style={{ ...th, minWidth: 90, textAlign: 'right' }}>Attainment</th>
+                      <th style={{ ...th, minWidth: 180 }}>Commentaire</th>
+                      <th style={{ ...th, minWidth: 90, textAlign: 'right' }}>Att. PO</th>
+                      <th style={{ ...th, minWidth: 70 }}>Statut</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tableRows.length > 0 ? tableRows.map((row, i) => {
+                      const cAtt   = courseAttForProg(row.course.code, progStudentIds, students);
+                      const poAtt  = curPO[row.pi];
+                      const poHasData = poAtt > 0;
+
+                      return (
+                        <tr key={`${batchId}-${row.po}-${row.course.code}`} style={{ borderBottom: '1px solid var(--line)' }}>
+
+                          {/* PO — affiché uniquement sur la première ligne du groupe */}
+                          {row.isFirst && (
+                            <td
+                              rowSpan={row.span}
+                              style={{ padding: '10px 8px', verticalAlign: 'top', background: 'var(--surface)', borderRight: '1px solid var(--line)' }}
+                            >
+                              <div className="mono" style={{ fontWeight: 700, fontSize: 13 }}>{row.po}</div>
+                              <div style={{ fontSize: 11, color: 'var(--ink-3)', lineHeight: 1.3, marginTop: 2 }}>{PO_LABELS[row.pi]}</div>
+                            </td>
+                          )}
+
+                          {/* Cours contributeur */}
+                          <td style={{ padding: '8px 10px', fontSize: 13 }}>
+                            <span className="mono" style={{ color: 'var(--ink-2)', fontSize: 12 }}>{row.course.code}</span>
+                            <span style={{ color: 'var(--ink-3)', margin: '0 4px' }}>·</span>
+                            {row.course.name}
+                          </td>
+
+                          {/* Attainment du cours */}
+                          <td style={{ padding: '8px 10px', textAlign: 'right', fontSize: 13, fontWeight: 500 }}>
+                            {cAtt != null ? (
+                              <span style={{ color: cAtt >= PASS ? 'var(--teal)' : 'var(--red)' }}>
+                                {cAtt}%
+                              </span>
+                            ) : (
+                              <span style={{ color: 'var(--ink-3)' }}>—</span>
+                            )}
+                          </td>
+
+                          {/* Commentaire — sauvegardé au blur */}
+                          <td style={{ padding: '4px 8px' }}>
+                            <input
+                              key={`cc-${batchId}-${row.course.code}`}
+                              defaultValue={b.courseComments?.[row.course.code] ?? ''}
+                              onBlur={e => dispatch({ type: 'SAVE_COURSE_COMMENT', batchId, code: row.course.code, comment: e.target.value })}
+                              placeholder="Commentaire…"
+                              style={{
+                                width: '100%', border: 'none', outline: 'none',
+                                borderBottom: '1px solid var(--line)',
+                                background: 'transparent', padding: '4px 2px', fontSize: 12,
+                              }}
+                            />
+                          </td>
+
+                          {/* Attainment PO — affiché uniquement sur la première ligne du groupe */}
+                          {row.isFirst && (
+                            <td
+                              rowSpan={row.span}
+                              style={{
+                                padding: '10px 8px', textAlign: 'right', verticalAlign: 'middle',
+                                fontWeight: 700, fontSize: 15,
+                                color: !poHasData ? 'var(--ink-3)' : poAtt >= PASS ? 'var(--teal)' : 'var(--red)',
+                              }}
+                            >
+                              {poHasData ? poAtt + '%' : '—'}
+                            </td>
+                          )}
+
+                          {/* Statut PO — affiché uniquement sur la première ligne du groupe */}
+                          {row.isFirst && (
+                            <td rowSpan={row.span} style={{ padding: '10px 8px', verticalAlign: 'middle' }}>
+                              {poHasData ? (
+                                poAtt >= PASS
+                                  ? <span className="tag ok">met</span>
+                                  : <span className="tag no">below</span>
+                              ) : (
+                                <span style={{ color: 'var(--ink-3)', fontSize: 12 }}>—</span>
+                              )}
+                            </td>
+                          )}
+                        </tr>
+                      );
+                    }) : (
+                      <tr>
+                        <td colSpan={6} className="empty" style={{ padding: '24px 8px' }}>
+                          Aucun cours dans le curriculum pour ce semestre.
                         </td>
                       </tr>
-                    );
-                  }) : (
-                    <tr><td colSpan={6} className="empty">No course data for this batch yet.</td></tr>
-                  )}
-                </tbody>
-              </table>
-              <div className="meta" style={{ marginTop: 8 }}>
-                Course attainment = average of the students' scores for that course. Edit individual students below.
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
 
-            {/* Zone de commentaire libre au niveau du batch */}
-            <div className="card comment" style={{ marginTop: 16 }}>
-              <h2>Batch comment</h2>
-              <div className="sub">One note at batch level (not per student)</div>
-              {/* defaultValue utilisé pour éviter que React contrôle le textarea (le contenu peut changer de batch) */}
-              <textarea
-                id="bcomment"
-                placeholder="Observations, areas to improve, teaching decisions…"
-                defaultValue={b.comment}
-              />
-              <div className="row-end">
-                <button className="btn primary sm" onClick={saveComment}>Save comment</button>
-              </div>
-            </div>
 
-            {/* Liste des étudiants du batch */}
+            {/* ================================================================
+                LISTE DES ÉTUDIANTS (filtrée par programme)
+            ================================================================ */}
             <div className="card" style={{ marginTop: 16 }}>
-              <h2>Batch students ({b.students.length})</h2>
-              <div className="sub">Click a row to view and edit course scores</div>
+              <h2>Étudiants · {activeProgram} ({progStudentIds.length})</h2>
+              <div className="sub">Cliquer sur une ligne pour éditer les scores</div>
               <table>
                 <thead>
                   <tr>
-                    <th>Matric</th><th>Name</th>
-                    <th style={{ textAlign: 'right' }}>Average</th>
-                    <th style={{ textAlign: 'right' }}>POs met</th>
+                    <th>Matric</th><th>Nom</th>
+                    <th style={{ textAlign: 'right' }}>Moyenne</th>
+                    <th style={{ textAlign: 'right' }}>POs validés</th>
                     <th />
                   </tr>
                 </thead>
                 <tbody>
-                  {b.students.length ? b.students.map(id => {
+                  {progStudentIds.length ? progStudentIds.map(id => {
                     const s  = students[id];
                     const po = studentPO(s, sem, courses);
                     const ov = avgOf(po);
                     return (
                       <tr
                         key={id}
-                        /* Navigue vers la vue détail de l'étudiant au clic */
                         onClick={() => { dispatch({ type: 'SET_LECT', patch: { studentId: id } }); go('lect-student'); }}
                         style={{ cursor: 'pointer' }}
                       >
@@ -345,17 +513,28 @@ export default function LecturerBatchesView() {
                       </tr>
                     );
                   }) : (
-                    <tr><td colSpan={5} className="empty">No student — import an Excel file.</td></tr>
+                    <tr><td colSpan={5} className="empty">Aucun étudiant {activeProgram} dans ce batch.</td></tr>
                   )}
                 </tbody>
               </table>
             </div>
 
-            {/* Vue globale : moyenne PO sur tous les batches confondus */}
-            <div className="card" style={{ marginTop: 16 }}>
-              <h2>Overall PO attainment — all batches</h2>
-              <div className="sub">Global average per PO across all batches</div>
-              <BarsSVG series={[{ values: allBatchesPO, color: 'var(--teal)', stroke: 'var(--teal)' }]} />
+
+            {/* ================================================================
+                COMMENTAIRE BATCH
+            ================================================================ */}
+            <div className="card comment" style={{ marginTop: 16 }}>
+              <h2>Commentaire batch</h2>
+              <div className="sub">Note globale pour ce batch (commune à tous les programmes)</div>
+              <textarea
+                id="bcomment"
+                key={batchId}
+                placeholder="Observations, points à améliorer, décisions pédagogiques…"
+                defaultValue={b.comment}
+              />
+              <div className="row-end">
+                <button className="btn primary sm" onClick={saveComment}>Sauvegarder</button>
+              </div>
             </div>
 
           </main>

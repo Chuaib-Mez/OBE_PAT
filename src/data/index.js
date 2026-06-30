@@ -129,10 +129,10 @@ export const CUR_YEAR = 2026;
 export const COMPARE_YEARS = [2025, 2024, 2023, 2022];
 
 export const INITIAL_BATCHES = {
-  B7: { num: 7, name: "Batch 7", year: CUR_YEAR, session: "A251", progress: 3, owner: "L1", comment: "", students: ["test_s1"] },
-  B6: { num: 6, name: "Batch 6", year: CUR_YEAR, session: "A242", progress: 8, owner: "L1", comment: "", students: [] },
-  B5: { num: 5, name: "Batch 5", year: CUR_YEAR, session: "A232", progress: 8, owner: "L1", comment: "", students: [] },
-  B4: { num: 4, name: "Batch 4", year: CUR_YEAR, session: "A222", progress: 8, owner: "L1", comment: "", students: [] },
+  B7: { num: 7, name: "Batch 7", year: CUR_YEAR, session: "A251", progress: 3, owner: "L1", comment: "", students: ["test_s1"], courseComments: {} },
+  B6: { num: 6, name: "Batch 6", year: CUR_YEAR, session: "A242", progress: 8, owner: "L1", comment: "", students: [], courseComments: {} },
+  B5: { num: 5, name: "Batch 5", year: CUR_YEAR, session: "A232", progress: 8, owner: "L1", comment: "", students: [], courseComments: {} },
+  B4: { num: 4, name: "Batch 4", year: CUR_YEAR, session: "A222", progress: 8, owner: "L1", comment: "", students: [], courseComments: {} },
 };
 
 

@@ -19,7 +19,7 @@ const INIT = {
   loginRole: 'student',
 
   student: { id: null, sem: 1, showMine: true, showAvg: false },
-  lect:    { batch: null, sem: 1, compare: false, compareYear: 2025, studentId: null, lecturer: null, filter: 'all' },
+  lect:    { batch: null, sem: 1, compare: false, compareYear: 2025, studentId: null, lecturer: null, filter: 'all', prog1: 'Engineering', prog2: 'Programming', activeProgTab: 0, chartMode: 'po' },
   admin:   { fileId: null, targetBatch: Object.keys(INITIAL_BATCHES)[0], editSemCi: -1 },
 
   courses:   INITIAL_COURSES,
@@ -91,6 +91,16 @@ function reducer(state, action) {
 
     case 'SAVE_COMMENT': {
       const batches = { ...state.batches, [action.batchId]: { ...state.batches[action.batchId], comment: action.comment } };
+      return { ...state, batches };
+    }
+
+    case 'SAVE_COURSE_COMMENT': {
+      const { batchId, code, comment } = action;
+      const batch = state.batches[batchId];
+      const batches = {
+        ...state.batches,
+        [batchId]: { ...batch, courseComments: { ...(batch.courseComments || {}), [code]: comment } },
+      };
       return { ...state, batches };
     }
 
