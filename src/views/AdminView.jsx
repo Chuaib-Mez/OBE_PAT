@@ -130,13 +130,9 @@ function UserRow({ user, role, dispatch, toast }) {
         )}
       </td>
 
-      {/* Mot de passe temporaire — affiché tant que mustChangePassword est vrai */}
+      {/* Mot de passe — toujours visible en temps réel (temp ou défini par l'utilisateur) */}
       <td style={{ padding: 0, minWidth: 130 }}>
-        {user.mustChangePassword ? (
-          <CellInput value={user.password ?? ''} readOnly mono />
-        ) : (
-          <span style={{ padding: '5px 8px', fontSize: 13, color: 'var(--ink-3)' }}>Actif ✓</span>
-        )}
+        <CellInput value={user.password ?? ''} readOnly mono />
       </td>
 
       {/* Bouton supprimer */}
