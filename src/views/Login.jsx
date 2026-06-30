@@ -1,7 +1,8 @@
 /* ============================================================
    views/Login.jsx — Page de connexion
-   Trois rôles : Student (par matricule), Lecturer (par login),
+   Trois rôles : Student (matricule + mdp), Lecturer (email + mdp),
    Admin (login + mot de passe vérifiés contre ADMIN_CREDENTIALS).
+   Premier login → redirection vers ChangePassword (via reducer LOGIN).
    ============================================================ */
 
 import { useRef } from 'react';
@@ -17,34 +18,40 @@ export default function Login() {
   const setRole = (role) => dispatch({ type: 'SET_LOGIN_ROLE', role });
 
   const doLogin = () => {
+    const idVal = (idRef.current?.value || '').trim();
+    const pwVal = (pwRef.current?.value || '').trim();
+
     if (loginRole === 'student') {
       /* Recherche par matricule, insensible à la casse */
-      const id  = (idRef.current?.value || '').trim().toUpperCase();
-      const stu = Object.values(students).find(s => s.matric.toUpperCase() === id);
-      if (!stu) { toast('No student found for this matric'); return; }
+      const stu = Object.values(students).find(s => s.matric.toUpperCase() === idVal.toUpperCase());
+      if (!stu) { toast('Matricule introuvable'); return; }
+      if (stu.password !== pwVal) { toast('Mot de passe incorrect'); return; }
       dispatch({ type: 'LOGIN', role: 'student', studentId: stu.id });
 
     } else if (loginRole === 'admin') {
       /* Vérification des identifiants admin */
-      const login = (idRef.current?.value || '').trim();
-      const pw    = (pwRef.current?.value || '').trim();
-      if (login !== ADMIN_CREDENTIALS.login || pw !== ADMIN_CREDENTIALS.password) {
-        toast('Invalid credentials');
+      if (idVal !== ADMIN_CREDENTIALS.login || pwVal !== ADMIN_CREDENTIALS.password) {
+        toast('Identifiants invalides');
         return;
       }
       dispatch({ type: 'LOGIN', role: 'admin' });
 
     } else {
-      /* Enseignant : recherche par login, ouvre son premier batch */
-      const idv      = (idRef.current?.value || '').trim().toLowerCase();
-      const entry    = Object.entries(lecturers).find(([, l]) => l.login === idv);
-      const lecturer = entry ? entry[0] : Object.keys(lecturers)[0];
-      const batch    = lecturerBatches(lecturer, batches)[0] || Object.keys(batches)[0];
-      dispatch({ type: 'LOGIN', role: 'lecturer', lecturer, batch });
+      /* Enseignant : recherche par email (= nom d'utilisateur) */
+      const entry = Object.entries(lecturers).find(([, l]) => l.email?.toLowerCase() === idVal.toLowerCase());
+      if (!entry) { toast('Aucun compte trouvé pour cet email'); return; }
+      const [lid, lec] = entry;
+      if (lec.password !== pwVal) { toast('Mot de passe incorrect'); return; }
+      const batch = lecturerBatches(lid, batches)[0] || Object.keys(batches)[0];
+      dispatch({ type: 'LOGIN', role: 'lecturer', lecturer: lid, batch });
     }
   };
 
   const handleKey = (e) => { if (e.key === 'Enter') doLogin(); };
+
+  /* Label du champ identifiant selon le rôle */
+  const idLabel = loginRole === 'student' ? 'Matricule' : loginRole === 'admin' ? 'Nom d\'utilisateur' : 'Adresse email';
+  const idPlaceholder = loginRole === 'student' ? 'Entrez votre matricule' : loginRole === 'admin' ? 'admin' : 'prenom.nom@univ.edu';
 
   return (
     <div className="login-stage">
@@ -59,31 +66,24 @@ export default function Login() {
           <button className={loginRole === 'admin'    ? 'on' : ''} onClick={() => setRole('admin')}>Admin</button>
         </div>
 
-        {/* Champ matricule pour étudiant, sinon login + mot de passe */}
-        {loginRole === 'student' ? (
-          <div className="field">
-            <label>Student ID (matric)</label>
-            <input ref={idRef} placeholder="Enter your matric number" autoComplete="off" onKeyDown={handleKey} />
-          </div>
-        ) : (
-          <>
-            <div className="field">
-              <label>Username</label>
-              <input ref={idRef} placeholder="Enter your username" autoComplete="off" onKeyDown={handleKey} />
-            </div>
-            <div className="field">
-              <label>Password</label>
-              <input ref={pwRef} type="password" placeholder="Enter your password" onKeyDown={handleKey} />
-            </div>
-          </>
-        )}
+        {/* Identifiant */}
+        <div className="field">
+          <label>{idLabel}</label>
+          <input ref={idRef} placeholder={idPlaceholder} autoComplete="off" onKeyDown={handleKey} />
+        </div>
+
+        {/* Mot de passe */}
+        <div className="field">
+          <label>Mot de passe</label>
+          <input ref={pwRef} type="password" placeholder="Entrez votre mot de passe" onKeyDown={handleKey} />
+        </div>
 
         <button
           className="btn primary"
           style={{ width: '100%', justifyContent: 'center', height: 42 }}
           onClick={doLogin}
         >
-          {loginRole === 'student' ? 'View my results' : loginRole === 'admin' ? 'Open admin console' : 'Open lecturer space'}
+          {loginRole === 'student' ? 'Voir mes résultats' : loginRole === 'admin' ? 'Console admin' : 'Espace enseignant'}
         </button>
       </div>
     </div>

@@ -37,6 +37,15 @@ export const PROGRAMS = [
 /* ---- Identifiants de l'administrateur (prototype) ---- */
 export const ADMIN_CREDENTIALS = { login: "admin", password: "admin" };
 
+/*
+  Génère un mot de passe temporaire de 10 caractères.
+  Évite les caractères ambigus (0/O, 1/l/I).
+*/
+export function generatePassword() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+  return Array.from({ length: 10 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+}
+
 
 /* ============================================================
    MATRICE CO-PO
@@ -80,14 +89,16 @@ export const INITIAL_COURSES = [
 */
 export const INITIAL_STUDENTS = {
   test_s1: {
-    id:           "test_s1",
-    firstName:    "Ahmad",
-    lastName:     "Ali",
-    name:         "Ahmad Ali",
-    matric:       "A251001",  /* Généré : session du batch + numéro d'ordre */
-    batch:        "B7",
-    program:      "Engineering",
-    courseScores: {},
+    id:                 "test_s1",
+    firstName:          "Ahmad",
+    lastName:           "Ali",
+    name:               "Ahmad Ali",
+    matric:             "A251001",
+    batch:              "B7",
+    program:            "Engineering",
+    courseScores:       {},
+    password:           "Test1234",
+    mustChangePassword: false,
   },
 };
 
@@ -97,13 +108,15 @@ export const INITIAL_STUDENTS = {
 */
 export const INITIAL_LECTURERS = {
   L1: {
-    id:        "L1",
-    firstName: "Lee",
-    lastName:  "Wei",
-    name:      "Dr. Lee Wei",
-    login:     "lee.staff",
-    courses:   [],   /* Codes des cours dont cet enseignant est responsable */
-    batch:     "B7", /* Batch dont il est le référent */
+    id:                 "L1",
+    firstName:          "Lee",
+    lastName:           "Wei",
+    name:               "Dr. Lee Wei",
+    email:              "lee.wei@univ.edu",
+    courses:            [],
+    batch:              "B7",
+    password:           "Test1234",
+    mustChangePassword: false,
   },
 };
 
@@ -138,19 +151,6 @@ export function generateMatric(batchId, batches) {
   const n = batch.students.length + 1;
   return batch.session + String(n).padStart(3, '0');
 }
-
-/*
-  Génère un login unique pour un enseignant importé.
-  Format : {prenom}.{nom}.staff (minuscules, sans accents)
-  Exemple : "Lee", "Wei" → "lee.wei.staff"
-*/
-export function generateLogin(firstName, lastName) {
-  const clean = s => s.toLowerCase()
-    .normalize('NFD').replace(/[̀-ͯ]/g, '') /* Supprime les accents */
-    .replace(/\s+/g, '');
-  return `${clean(firstName)}.${clean(lastName)}.staff`;
-}
-
 
 /* ============================================================
    FONCTIONS DE CALCUL (pures — reçoivent les données en paramètre)

@@ -10,7 +10,7 @@
 import { useRef, useState } from 'react';
 import AppBar from '../components/AppBar.jsx';
 import { useApp } from '../context/AppContext.jsx';
-import { POS, PO_LABELS, PASS, PROGRAMS } from '../data/index.js';
+import { POS, PO_LABELS, PASS } from '../data/index.js';
 
 
 /* ============================================================
@@ -80,7 +80,7 @@ function CellSelect({ value, onChange, children }) {
    LIGNE UTILISATEUR (une ligne = un user dans le tableau)
 ============================================================ */
 
-function UserRow({ user, role, batches, dispatch, toast }) {
+function UserRow({ user, role, dispatch, toast }) {
   /* Raccourci pour dispatcher une mise à jour partielle */
   const upd = (patch) =>
     dispatch({ type: role === 'student' ? 'UPDATE_STUDENT' : 'UPDATE_LECTURER', id: user.id, patch });
@@ -117,53 +117,25 @@ function UserRow({ user, role, batches, dispatch, toast }) {
         </CellSelect>
       </td>
 
-      {/* Batch — liste déroulante */}
-      <td style={{ padding: 0, minWidth: 110 }}>
-        <CellSelect
-          value={user.batch}
-          onChange={e => upd({ batch: e.target.value })}
-        >
-          {Object.entries(batches).map(([id, b]) => (
-            <option key={id} value={id}>{b.name}</option>
-          ))}
-        </CellSelect>
-      </td>
-
-      {/* Programme (étudiant) ou Cours enseignés (enseignant) */}
-      <td style={{ padding: 0, minWidth: 160 }}>
+      {/* Identifiant de connexion : matric (lecture seule) pour étudiant, email (éditable) pour prof */}
+      <td style={{ padding: 0, minWidth: 170 }}>
         {role === 'student' ? (
-          /* Étudiant : liste déroulante des programmes */
-          <CellSelect
-            value={user.program}
-            onChange={e => upd({ program: e.target.value })}
-          >
-            {PROGRAMS.map(p => <option key={p} value={p}>{p}</option>)}
-          </CellSelect>
+          <CellInput value={user.matric} readOnly mono placeholder="Matricule" />
         ) : (
-          /* Enseignant : codes des cours séparés par des virgules */
           <CellInput
-            value={user.courses?.join(', ')}
-            onChange={e => upd({ courses: e.target.value.split(',').map(x => x.trim().toUpperCase()).filter(Boolean) })}
-            placeholder="CS101, CS210…"
+            value={user.email ?? ''}
+            onChange={e => upd({ email: e.target.value })}
+            placeholder="email@univ.edu"
           />
         )}
       </td>
 
-      {/* Matricule (étudiant, éditable) ou Login (enseignant, généré automatiquement) */}
-      <td style={{ padding: 0, minWidth: 120 }}>
-        {role === 'student' ? (
-          <CellInput
-            value={user.matric}
-            onChange={e => upd({ matric: e.target.value })}
-            placeholder="Matricule"
-            mono
-          />
+      {/* Mot de passe temporaire — affiché tant que mustChangePassword est vrai */}
+      <td style={{ padding: 0, minWidth: 130 }}>
+        {user.mustChangePassword ? (
+          <CellInput value={user.password ?? ''} readOnly mono />
         ) : (
-          <CellInput
-            value={user.login}
-            readOnly
-            mono
-          />
+          <span style={{ padding: '5px 8px', fontSize: 13, color: 'var(--ink-3)' }}>Actif ✓</span>
         )}
       </td>
 
@@ -174,7 +146,7 @@ function UserRow({ user, role, batches, dispatch, toast }) {
           style={{ padding: '2px 7px', color: 'var(--red)' }}
           onClick={() => {
             dispatch({ type: 'DELETE_USER', userId: user.id, role });
-            toast('User deleted');
+            toast('Utilisateur supprimé');
           }}
           aria-label="Delete user"
         >
@@ -248,17 +220,18 @@ export default function AdminView() {
         const lines = reader.result.split(/\r?\n/).filter(l => l.trim());
         const head  = lines.shift().split(',').map(h => h.trim().toLowerCase());
         const iN = head.indexOf('nom'), iP = head.indexOf('prenom'),
-              iC = head.indexOf('cours'), iB = head.indexOf('batch');
-        if (iN < 0 || iP < 0) { toast('Colonnes requises : nom, prenom, cours, batch'); return; }
+              iE = head.indexOf('email'), iC = head.indexOf('cours'), iB = head.indexOf('batch');
+        if (iN < 0 || iP < 0) { toast('Colonnes requises : nom, prenom, email, cours, batch'); return; }
         const rows = [];
         lines.forEach(l => {
           const c         = l.split(',');
           const lastName  = (c[iN] || '').trim();
           const firstName = (c[iP] || '').trim();
+          const email     = iE >= 0 ? (c[iE] || '').trim().toLowerCase() : '';
           const courses   = iC >= 0 ? (c[iC] || '').split('|').map(x => x.trim().toUpperCase()).filter(Boolean) : [];
           const batchId   = iB >= 0 ? (c[iB] || '').trim().toUpperCase() : '';
           if (!lastName && !firstName) return;
-          rows.push({ firstName, lastName, courses, batchId });
+          rows.push({ firstName, lastName, email, courses, batchId });
         });
         dispatch({ type: 'IMPORT_LECTURERS_EXCEL', rows });
         toast(`${rows.length} enseignant(s) importé(s)`);
@@ -346,12 +319,12 @@ export default function AdminView() {
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-start' }}>
               <div style={{ textAlign: 'center' }}>
                 <button className="btn sm" onClick={() => stuFileRef.current?.click()}>⬆ Étudiants</button>
-                <div className="meta" style={{ fontSize: 11, marginTop: 2 }}>nom, prenom, batch, programme</div>
+                <div className="meta" style={{ fontSize: 11, marginTop: 2 }}>nom, prenom, batch, programme (CSV)</div>
                 <input ref={stuFileRef} type="file" accept=".csv" hidden onChange={onImportStudents} />
               </div>
               <div style={{ textAlign: 'center' }}>
                 <button className="btn sm" onClick={() => lecFileRef.current?.click()}>⬆ Enseignants</button>
-                <div className="meta" style={{ fontSize: 11, marginTop: 2 }}>nom, prenom, cours, batch</div>
+                <div className="meta" style={{ fontSize: 11, marginTop: 2 }}>nom, prenom, email, cours, batch (CSV)</div>
                 <input ref={lecFileRef} type="file" accept=".csv" hidden onChange={onImportLecturers} />
               </div>
               <button className="btn primary sm" onClick={() => dispatch({ type: 'ADD_USER' })}>+ Add row</button>
@@ -366,9 +339,8 @@ export default function AdminView() {
                   <th style={thStyle}>Nom</th>
                   <th style={thStyle}>Prénom</th>
                   <th style={thStyle}>Rôle</th>
-                  <th style={thStyle}>Batch</th>
-                  <th style={thStyle}>Programme / Cours</th>
-                  <th style={thStyle}>Matric / Login</th>
+                  <th style={thStyle}>Login (matric / email)</th>
+                  <th style={thStyle}>Mot de passe temp</th>
                   <th style={{ ...thStyle, width: 40 }} />
                 </tr>
               </thead>
@@ -378,13 +350,12 @@ export default function AdminView() {
                     key={u.id}
                     user={u}
                     role={u._role}
-                    batches={batches}
                     dispatch={dispatch}
                     toast={toast}
                   />
                 )) : (
                   <tr>
-                    <td colSpan={7} className="empty" style={{ padding: '16px 8px' }}>
+                    <td colSpan={6} className="empty" style={{ padding: '16px 8px' }}>
                       Aucun utilisateur. Importez un fichier ou cliquez sur "+ Add row".
                     </td>
                   </tr>

@@ -6,7 +6,7 @@
 import { createContext, useContext, useReducer, useState, useCallback, useRef } from 'react';
 import {
   INITIAL_COURSES, INITIAL_LECTURERS, INITIAL_BATCHES, INITIAL_STUDENTS,
-  PROGRAMS, generateMatric, generateLogin,
+  PROGRAMS, generateMatric, generatePassword,
 } from '../data/index.js';
 
 
@@ -44,10 +44,20 @@ function reducer(state, action) {
 
     case 'LOGIN': {
       const { role, studentId, lecturer, batch } = action;
+
+      /* Vérifie si l'utilisateur doit changer son mot de passe au premier login */
+      const mustChange =
+        role === 'student'  ? !!state.students[studentId]?.mustChangePassword  :
+        role === 'lecturer' ? !!state.lecturers[lecturer]?.mustChangePassword  : false;
+
+      const defaultView =
+        role === 'student'  ? 'student'      :
+        role === 'admin'    ? 'admin'         : 'lect-batches';
+
       return {
         ...state,
         role,
-        view: role === 'student' ? 'student' : role === 'admin' ? 'admin' : 'lect-batches',
+        view: mustChange ? 'change-password' : defaultView,
         student: role === 'student' ? { ...state.student, id: studentId, sem: 1 } : state.student,
         lect: (role === 'lecturer' || role === 'admin')
           ? { ...state.lect, lecturer: lecturer ?? state.lect.lecturer, batch: batch ?? state.lect.batch, sem: 1 }
@@ -122,7 +132,11 @@ function reducer(state, action) {
           students = { ...students, [existing.id]: { ...existing, courseScores: { ...existing.courseScores, [course]: att } } };
         } else {
           const id = 'imp' + Object.keys(students).length;
-          students = { ...students, [id]: { id, batch: batchId, matric, name: name || matric, firstName: '', lastName: name || matric, program: '', courseScores: { [course]: att } } };
+          students = { ...students, [id]: {
+            id, batch: batchId, matric, name: name || matric, firstName: '', lastName: name || matric,
+            program: '', courseScores: { [course]: att },
+            password: generatePassword(), mustChangePassword: true,
+          }};
           batchStudents.push(id);
         }
       });
@@ -154,7 +168,11 @@ function reducer(state, action) {
       const batchId = Object.keys(state.batches)[0] || '';
       const id      = 'usr_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 4);
       const matric  = generateMatric(batchId, state.batches);
-      const newStu  = { id, firstName: '', lastName: '', name: '', matric, batch: batchId, program: PROGRAMS[0] || '', courseScores: {} };
+      const newStu  = {
+        id, firstName: '', lastName: '', name: '', matric,
+        batch: batchId, program: PROGRAMS[0] || '', courseScores: {},
+        password: generatePassword(), mustChangePassword: true,
+      };
       const students = { ...state.students, [id]: newStu };
       const batches  = batchId
         ? { ...state.batches, [batchId]: { ...state.batches[batchId], students: [...state.batches[batchId].students, id] } }
@@ -260,8 +278,11 @@ function reducer(state, action) {
         if (batches[stu.batch]) {
           batches = { ...batches, [stu.batch]: { ...batches[stu.batch], students: batches[stu.batch].students.filter(id => id !== userId) } };
         }
-        const login = generateLogin(stu.firstName || stu.name, stu.lastName || '');
-        lecturers = { ...lecturers, [userId]: { id: userId, firstName: stu.firstName || '', lastName: stu.lastName || '', name: stu.name, login, courses: [], batch: stu.batch } };
+        lecturers = { ...lecturers, [userId]: {
+          id: userId, firstName: stu.firstName || '', lastName: stu.lastName || '',
+          name: stu.name, email: '', courses: [], batch: stu.batch,
+          password: generatePassword(), mustChangePassword: true,
+        }};
 
       } else if (currentRole === 'lecturer' && newRole === 'student') {
         const lec = lecturers[userId];
@@ -273,7 +294,11 @@ function reducer(state, action) {
         });
         const batchId = lec.batch || Object.keys(batches)[0];
         const matric  = generateMatric(batchId, batches);
-        students = { ...students, [userId]: { id: userId, firstName: lec.firstName || '', lastName: lec.lastName || '', name: lec.name, matric, batch: batchId, program: PROGRAMS[0] || '', courseScores: {} } };
+        students = { ...students, [userId]: {
+          id: userId, firstName: lec.firstName || '', lastName: lec.lastName || '',
+          name: lec.name, matric, batch: batchId, program: PROGRAMS[0] || '', courseScores: {},
+          password: generatePassword(), mustChangePassword: true,
+        }};
         if (batches[batchId]) {
           batches = { ...batches, [batchId]: { ...batches[batchId], students: [...batches[batchId].students, userId] } };
         }
@@ -292,8 +317,11 @@ function reducer(state, action) {
         const id     = 'stu_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 5);
         const matric = generateMatric(batchId, batches);
         const name   = `${firstName} ${lastName}`.trim();
-        students = { ...students, [id]: { id, firstName, lastName, name, matric, batch: batchId, program: program || '', courseScores: {} } };
-        batches  = { ...batches, [batchId]: { ...batches[batchId], students: [...batches[batchId].students, id] } };
+        students = { ...students, [id]: {
+          id, firstName, lastName, name, matric, batch: batchId, program: program || '', courseScores: {},
+          password: generatePassword(), mustChangePassword: true,
+        }};
+        batches = { ...batches, [batchId]: { ...batches[batchId], students: [...batches[batchId].students, id] } };
       });
       return { ...state, students, batches };
     }
@@ -302,17 +330,42 @@ function reducer(state, action) {
     case 'IMPORT_LECTURERS_EXCEL': {
       let lecturers = { ...state.lecturers };
       let batches   = { ...state.batches };
-      action.rows.forEach(({ firstName, lastName, courses, batchId }) => {
+      action.rows.forEach(({ firstName, lastName, email, courses, batchId }) => {
         if (!firstName && !lastName) return;
-        const id    = 'lec_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 5);
-        const login = generateLogin(firstName, lastName);
-        const name  = `${firstName} ${lastName}`.trim();
-        lecturers = { ...lecturers, [id]: { id, firstName, lastName, name, login, courses: courses || [], batch: batchId || '' } };
+        const id   = 'lec_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 5);
+        const name = `${firstName} ${lastName}`.trim();
+        lecturers = { ...lecturers, [id]: {
+          id, firstName, lastName, name, email: email || '', courses: courses || [], batch: batchId || '',
+          password: generatePassword(), mustChangePassword: true,
+        }};
         if (batchId && batches[batchId]) {
           batches = { ...batches, [batchId]: { ...batches[batchId], owner: id } };
         }
       });
       return { ...state, lecturers, batches };
+    }
+
+    /* Changement de mot de passe au premier login */
+    case 'CHANGE_PASSWORD': {
+      const { newPassword } = action;
+      const { role } = state;
+      if (role === 'student') {
+        const uid = state.student.id;
+        if (!state.students[uid]) return state;
+        return {
+          ...state, view: 'student',
+          students: { ...state.students, [uid]: { ...state.students[uid], password: newPassword, mustChangePassword: false } },
+        };
+      }
+      if (role === 'lecturer') {
+        const uid = state.lect.lecturer;
+        if (!state.lecturers[uid]) return state;
+        return {
+          ...state, view: 'lect-batches',
+          lecturers: { ...state.lecturers, [uid]: { ...state.lecturers[uid], password: newPassword, mustChangePassword: false } },
+        };
+      }
+      return state;
     }
 
     default:
