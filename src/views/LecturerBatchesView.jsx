@@ -75,14 +75,14 @@ export default function LecturerBatchesView() {
   /* Étudiants du batch appartenant au programme actif */
   const progStudentIds = b.students.filter(id => students[id]?.program === activeProgram);
 
-  /* ---- Cours du semestre courant (tous, qu'il y ait des scores ou non) ---- */
+  /* ---- Cours du semestre sélectionné UNIQUEMENT (pas cumulatif) ---- */
   const semCourses = courses
-    .filter(c => sem === 'all' || c.semester <= sem)
+    .filter(c => sem === 'all' || c.semester === sem)
     .slice()
     .sort((a, b2) => a.semester - b2.semester);
 
-  /* ---- Scores PO pour le programme actif ---- */
-  const curPO  = batchPOForProg(progStudentIds, sem, students, courses);
+  /* ---- Scores PO pour le programme actif (cours déjà filtrés par semestre) ---- */
+  const curPO  = batchPOForProg(progStudentIds, 'all', students, semCourses);
   const overall = avgOf(curPO);
 
   /* ---- Historique simulé (4 ans) ---- */
@@ -271,7 +271,7 @@ export default function LecturerBatchesView() {
               </div>
               <div className="stepper">
                 <button onClick={() => setSem(-1)}>‹</button>
-                <span className="val mono">{sem === 'all' ? 'Cumulatif' : `Jusqu\'au sem. ${sem}`}</span>
+                <span className="val mono">{sem === 'all' ? 'Tous semestres' : `Semestre ${sem}`}</span>
                 <button onClick={() => setSem(1)}>›</button>
               </div>
             </div>
@@ -323,7 +323,7 @@ export default function LecturerBatchesView() {
             <div className="card">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
                 <div>
-                  <h2>{chartMode === 'po' ? 'PO Attainment cumulatif' : 'Attainment par cours'} — {activeProgram}</h2>
+                  <h2>{chartMode === 'po' ? 'PO Attainment' : 'Attainment par cours'} — {activeProgram} · {sem === 'all' ? 'Tous semestres' : `Sem. ${sem}`}</h2>
                   <div className="sub">Comparaison avec les 4 dernières promotions · ligne rouge = seuil</div>
                 </div>
                 {/* Toggle By PO / By Course */}
@@ -501,7 +501,7 @@ export default function LecturerBatchesView() {
                 <tbody>
                   {progStudentIds.length ? progStudentIds.map(id => {
                     const s  = students[id];
-                    const po = studentPO(s, sem, courses);
+                    const po = studentPO(s, 'all', semCourses);
                     const ov = avgOf(po);
                     return (
                       <tr
