@@ -17,7 +17,7 @@ import AppBar from '../components/AppBar.jsx';
 import BarsSVG from '../components/BarsSVG.jsx';
 import { useApp } from '../context/AppContext.jsx';
 import {
-  POS, PO_LABELS, PASS, PROGRAMS, COMPARE_YEARS,
+  POS, PO_LABELS, PASS, COMPARE_YEARS,
   semOrder, batchPO, courseAttainment, studentPO, avgOf, visibleBatches, makeHistory, wmean, mean,
 } from '../data/index.js';
 
@@ -296,17 +296,6 @@ export default function LecturerBatchesView() {
                     <span style={{ fontWeight: isActive ? 600 : 400, fontSize: 13, color: isActive ? 'var(--teal)' : 'var(--ink-2)' }}>
                       {prog}
                     </span>
-                    <select
-                      value={prog}
-                      onClick={e => e.stopPropagation()}
-                      onChange={e => {
-                        const patch = tabIdx === 0 ? { prog1: e.target.value } : { prog2: e.target.value };
-                        dispatch({ type: 'SET_LECT', patch });
-                      }}
-                      style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 11, color: 'var(--ink-3)', outline: 'none' }}
-                    >
-                      {PROGRAMS.map(p => <option key={p} value={p}>{p}</option>)}
-                    </select>
                   </div>
                 );
               })}
